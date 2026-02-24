@@ -5,7 +5,7 @@ library(cmdstanr)
 library(dplyr)
 library(posterior)
 
-source("code/aux_fun_normal.R")
+source("code/normal/aux_fun_normal.R")
 load("data/sim_normal_data.RData")
 y0 <- hist_data$y
 n0 <- length(y0)
@@ -65,7 +65,7 @@ draws_priorpred_npp <- do.call(rbind, draws_priorpred_npp)
 
 
 # sample posterior 
-normal_model <- cmdstan_model("code/normal_npp_eta.stan")
+normal_model <- cmdstan_model("code/normal/normal_npp_eta.stan")
 
 stan_data <- list(
   n = n,
@@ -113,8 +113,9 @@ draws_mu_npp_post <- lapply(
 )
 draws_mu_npp_post <- do.call(rbind, draws_mu_npp_post)
 
-save(draws_eta_prior, file = 'samples_ppc/draws_eta_prior_normal.RData')
-save(draws_mu_npp_prior, file = 'samples_ppc/draws_mu_npp_prior.RData')
-save(draws_priorpred_npp, file = 'samples_ppc/draws_priorpred_npp_normal.RData')
-save(draws_eta_post, file = 'samples_ppc/draws_eta_post_normal.RData')
-save(draws_mu_npp_post, file = 'samples_ppc/draws_mu_npp_post.RData')
+save(draws_eta_prior, file = 'samples/draws_eta_prior_normal.RData')
+save(draws_mu_npp_prior, file = 'samples/draws_mu_npp_prior.RData')
+save(draws_priorpred_npp, file = 'samples/draws_priorpred_npp_normal.RData')
+save(draws_eta_post, file = 'samples/draws_eta_post_normal.RData')
+save(draws_mu_npp_post, file = 'samples/draws_mu_npp_post.RData')
+

@@ -1,9 +1,9 @@
 post_par_conj_normal <- function(m, v, a, b, w, y) {
   n <- length(y)
-  v_star <- 1/(1/w*n + v)
+  v_star <- 1/(1/w*n + 1/v)
   m_star <- v_star * (m/v + 1/w* sum(y))
   a_star <- a + n/2
-  b_star <- b + 0.5 * (t(y) %*% y + 1/v * m^2 - 
+  b_star <- b + 0.5 * (1/w*t(y) %*% y + 1/v * m^2 - 
                          1/v_star * m_star^2)
   return(list(m_star = m_star,
               v_star = v_star,
@@ -23,7 +23,7 @@ pred_par_conj_normal <- function(m_star, v_star, a_star, b_star, w_tilde, y_tild
 }
 
 pp_hyper_conj_normal <- function(eta, m, v, a, b, y0) {
-  n0 <- nrow(X0)
+  n0 <- length(y0)
   if (eta == 0) {
     return(list(m_star = m,
                 v_star = v,
@@ -43,7 +43,6 @@ pp_post_par_conj_normal <- function(eta, m, v, a, b, y0, w, y) {
   v <- pp_prior_par$v_star
   a <- pp_prior_par$a_star
   b <- pp_prior_par$b_star
-  w <- 1
   post_par <- post_par_conj_normal(m, v, a, b, w, y)
   return(post_par)
 }

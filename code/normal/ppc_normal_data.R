@@ -8,16 +8,18 @@ library(gridExtra)
 library(LaplacesDemon)
 library(patchwork)
 
-load("samples_ppc/draws_mu_npp_post.RData")
-load("samples_ppc/draws_mu_npp_prior.RData")
-load("samples_ppc/draws_eta_post_normal.RData")
-load("samples_ppc/draws_eta_prior_normal.RData")
-load("samples_ppc/draws_priorpred_npp_normal.RData")
+source("code/normal/generate_normal_data.R")
+load("samples/draws_mu_npp_post.RData")
+load("samples/draws_mu_npp_prior.RData")
+load("samples/draws_eta_post_normal.RData")
+load("samples/draws_eta_prior_normal.RData")
+load("samples/draws_priorpred_npp_normal.RData")
 load("data/sim_normal_data.RData")
+source("code/normal/aux_fun_normal.R")
 
-true_mu_hist <- 0.5
+true_mu_hist <- 1
 true_sigma_hist <- 1
-true_mu_curr <- 0.5
+true_mu_curr <- 1
 true_sigma_curr <- 1
 
 y0 <- hist_data$y
@@ -48,52 +50,63 @@ hyva_t <- function(y, m, v, nu){
 }
 
 comp_crps <- function(eta){
-  pp_prior_par <- pp_hyper_conj_normal(eta, m, v, a, b, y0)
-  m_star <- pp_prior_par$m_star
-  v_star <- pp_prior_par$v_star
-  a_star <- pp_prior_par$a_star
-  b_star <- pp_prior_par$b_star
-  w_tilde <- 1
-  y_tilde <- y
-  pred_par <- pred_par_conj_normal(m_star, v_star, a_star, b_star, w_tilde, y_tilde)
-  
-  mean(crps_t(y_tilde, pred_par$nu_pred, pred_par$m_pred, pred_par$v_pred))
+  single <- function(e){
+    pp_prior_par <- pp_hyper_conj_normal(e, m, v, a, b, y0)
+    m_star <- pp_prior_par$m_star
+    v_star <- pp_prior_par$v_star
+    a_star <- pp_prior_par$a_star
+    b_star <- pp_prior_par$b_star
+    w_tilde <- 1
+    y_tilde <- y
+    pred_par <- pred_par_conj_normal(m_star, v_star, a_star, b_star, w_tilde, y_tilde)
+    mean(crps_t(y_tilde, pred_par$nu_pred, pred_par$m_pred, pred_par$v_pred))
+  }
+  if (length(eta) > 1) sapply(eta, single) else single(eta)
 }
 
-a0_list      <- seq(0, 1, length.out = 40)
-crps_list <- sapply(a0_list, comp_crps)
-plot(a0_list, crps_list, type = 'b', xlab = expression(a[0]), ylab = 'CRPS')
+crps_optim <- optimize(comp_crps, interval = c(0,1))
+best_a0_crps <- crps_optim$minimum
 
-best_a0_crps <- a0_list[which.min(crps_list)]
+png("figures/crps_curve_normal.png", width = 8, height = 5, units = "in", res = 320)
+curve(comp_crps(x), from = 1e-4, to = 1, xlab = expression(eta), ylab = 'CRPS')
+dev.off()
 
 comp_hyvarinen <- function(eta) {
-  pp_prior_par <- pp_hyper_conj_normal(eta, m, v, a, b, y0)
-  m_star <- pp_prior_par$m_star
-  v_star <- pp_prior_par$v_star
-  a_star <- pp_prior_par$a_star
-  b_star <- pp_prior_par$b_star
-  w_tilde <- 1
-  y_tilde <- y
-  
-  pred_par <- pred_par_conj_normal(m_star, v_star, a_star, b_star, w_tilde, y_tilde)
-  
-  n <- length(y_tilde)
-  v <- pred_par$v_pred
-  m <- pred_par$m_pred
-  df <- pred_par$nu_pred
-  # Hyvarinen score
-  hyva_t(y_tilde, rep(m, n), rep(v, n), df)
+  single <- function(e) {
+    pp_prior_par <- pp_hyper_conj_normal(e, m, v, a, b, y0)
+    m_star <- pp_prior_par$m_star
+    v_star <- pp_prior_par$v_star
+    a_star <- pp_prior_par$a_star
+    b_star <- pp_prior_par$b_star
+    w_tilde <- 1
+    y_tilde <- y
+
+    pred_par <- pred_par_conj_normal(m_star, v_star, a_star, b_star, w_tilde, y_tilde)
+
+    n <- length(y_tilde)
+    v_pred <- pred_par$v_pred
+    m_pred <- pred_par$m_pred
+    df <- pred_par$nu_pred
+
+    hyva_t(y_tilde, rep(m_pred, n), rep(v_pred, n), df)
+  }
+
+  if (length(eta) > 1) sapply(eta, single) else single(eta)
 }
-hyvarinen_list <- sapply(a0_list, comp_hyvarinen)
-plot(a0_list, hyvarinen_list, type = 'b', xlab = expression(a[0]), ylab = 'Hyvarinen score')
-best_a0_hyvarinen <- a0_list[which.min(hyvarinen_list)]
+
+hyva_optim <- optimize(comp_hyvarinen, interval = c(0,1))
+best_a0_hyvarinen <- hyva_optim$minimum
+
+png("figures/hyvarinen_curve_normal.png", width = 8, height = 5, units = "in", res = 320)
+curve(comp_hyvarinen(x), from = 1e-4, to = 1, xlab = expression(eta), ylab = 'Hyvarinen score')
+dev.off()
 
 # Create legend names
 name_crps <- "CRPS"
 name_hyv  <- "Hyva"
 
 # Wrap vectors as data frames
-obs <- 9
+obs <- 1
 # Observed value for vertical line
 obs_val <- curr_data$y[obs]
 
@@ -139,7 +152,8 @@ plot_mu <- ggplot() +
         nu=2*pp_par_crps$a_star)
   },
   aes(color = "CRPS"),
-  linewidth = 1
+  linewidth = 2.5,
+  linetype = 'dotted'
   ) +
   geom_function(fun = function(x) {
     dst(x,
@@ -171,9 +185,9 @@ plot_mu <- ggplot() +
   linewidth = 1.6
   )+
   geom_vline(aes(xintercept = true_mu_curr[1], color = 'beta_curr'), 
-             linewidth = 0.5, linetype = "dotted") +
+             linewidth = 0.5, linetype = "solid") +
   geom_vline(aes(xintercept = true_mu_hist[1], color = 'beta_hist'), 
-             linewidth = 0.5, linetype = "dashed") +
+             linewidth = 1.2, linetype = "dotted") +
   labs(x = expression(mu), y = '') +
   theme_bw() +
   geom_density(data = data.frame(y = draws_mu_npp_prior[,1]),
@@ -188,7 +202,7 @@ plot_mu <- ggplot() +
       "eta = 1" = "#7f7f7f",
       "NPP" = "#D0C366",
       "beta_curr" = "black",
-      "beta_hist" = "black"
+      "beta_hist" = "brown"
     ),
     labels = c(
       "CRPS"    = "CRPS",
@@ -206,7 +220,7 @@ plot_mu <- ggplot() +
                "beta_hist",
                "beta_curr")
   ) +
-  xlim(c(true_mu_curr[1]-0.5,true_mu_curr[1]+0.5)) +
+  xlim(c(true_mu_curr[1]-1,true_mu_curr[1]+1)) +
   theme(text = element_text(size = 12),        # Base text size
         axis.title = element_text(size = 14),  # Axis titles
         axis.text = element_text(size = 12),   # Axis tick labels
@@ -228,16 +242,18 @@ plot_eta <- ggplot() +
   geom_function(fun = function(x) {
     dbeta(x, a_tilde, b_tilde)
   }, aes(color = "NPP"), linewidth = 1) +
-  geom_vline(aes(xintercept = best_a0_crps, color = 'best_crps'), linewidth = 0.5, linetype = 'dotted') +
-  geom_vline(aes(xintercept = best_a0_hyvarinen, color = 'best_hyva'), linewidth = 0.5, linetype = 'dashed') +
+  geom_vline(aes(xintercept = best_a0_crps, color = 'best_crps'), 
+                  linewidth = 2.5, linetype = 'dotted') +
+  geom_vline(aes(xintercept = best_a0_hyvarinen, color = 'best_hyva'), 
+              linewidth = 0.5, linetype = 'solid') +
   labs(x = expression(eta), y = '') +
   theme_bw() +
   scale_color_manual(
     name = NULL,
     values = c(
       "NPP" = "#D0C366",
-      "best_crps" = "black",
-      "best_hyva" = "black"
+      "best_crps" = "#66A8D0",
+      "best_hyva" = "#D06673"
     ),
     labels = c(
       "best_crps" = "CRPS",
@@ -263,7 +279,7 @@ plot_eta <- ggplot() +
         panel.background = element_rect(fill = "white", color = NA),
         plot.background = element_rect(fill = "white", color = NA))
 
-plot_par <- plot_mu + plot_eta + plot_layout(ncol = 3)
+plot_par <- plot_mu + plot_eta + plot_layout(ncol = 2)
 plot_par
 ggsave(plot = plot_par,"figures/prior_normal.png", width = 15, height = 5, dpi = 320)
 
@@ -277,7 +293,8 @@ ggplot() +
         nu=pred_par_crps$nu_pred)
   },
   aes(color = "CRPS"),
-  linewidth = 1
+  linewidth = 2.5,
+  linetype = 'dotted'
   ) +
   geom_function(fun = function(x) {
     dst(x, 
@@ -376,6 +393,7 @@ ggplot() +
         panel.background = element_rect(fill = "white", color = NA),
         plot.background = element_rect(fill = "white", color = NA))
 
+
 ggsave("figures/ppc_npp_normal.png", width = 8, height = 5, dpi = 320)
 
 
@@ -393,7 +411,8 @@ plot_post_mu <- ggplot() +
         nu=pp_post_par_crps$a_star * 2)
   },
   aes(color = "CRPS"),
-  linewidth = 1
+  linewidth = 2.5,
+  linetype = 'dotted'
   ) +
   geom_function(fun = function(x) {
     dst(x,
@@ -425,9 +444,9 @@ plot_post_mu <- ggplot() +
   linewidth = 1.6
   )+
   geom_vline(aes(xintercept = true_mu_curr[1], color = 'beta_curr'), 
-             linewidth = 0.5, linetype = "dotted") +
+             linewidth = 0.5, linetype = "solid") +
   geom_vline(aes(xintercept = true_mu_hist[1], color = 'beta_hist'), 
-             linewidth = 0.5, linetype = "dashed") +
+             linewidth = 1.2, linetype = "dotted") +
   labs(x = expression(mu), y = '') +
   theme_bw() +
   geom_density(data = data.frame(y = draws_mu_npp_post[,1]),
@@ -442,7 +461,7 @@ plot_post_mu <- ggplot() +
       "eta = 1" = "#7f7f7f",
       "NPP" = "#D0C366",
       "beta_curr" = "black",
-      "beta_hist" = "black"
+      "beta_hist" = "brown"
     ),
     labels = c(
       "CRPS"    = "CRPS",
@@ -460,14 +479,14 @@ plot_post_mu <- ggplot() +
                "beta_hist",
                "beta_curr")
   ) +
-  xlim(c(true_mu_curr[1]-0.5,true_mu_curr[1]+0.5)) +
+  # xlim(c(true_mu_curr[1]-0.5,true_mu_curr[1]+0.5)) +
   theme(text = element_text(size = 12),        # Base text size
         axis.title = element_text(size = 14),  # Axis titles
         axis.text = element_text(size = 12),   # Axis tick labels
         legend.title = element_text(size = 14),
         legend.text = element_text(size = 12),
         strip.text = element_text(size = 11),
-        legend.position = c(0.8, 0.74),
+        legend.position = c(0.2, 0.74),
         legend.background = element_rect(
           fill = "white",     # background color of the legend
           color = "black",    # border color
@@ -476,20 +495,20 @@ plot_post_mu <- ggplot() +
         ),
         panel.background = element_rect(fill = "white", color = NA),
         plot.background = element_rect(fill = "white", color = NA))
-
+plot_post_mu
 
 plot_post_eta <- ggplot() +
   geom_density(data = data.frame(y = draws_eta_post), aes(x = y, color = "NPP"), linewidth = 1) +
-  geom_vline(aes(xintercept = best_a0_crps, color = 'best_crps'), linewidth = 0.5, linetype = 'dotted') +
-  geom_vline(aes(xintercept = best_a0_hyvarinen, color = 'best_hyva'), linewidth = 0.5, linetype = 'dashed') +
+  geom_vline(aes(xintercept = best_a0_crps, color = 'best_crps'), linewidth = 2.5, linetype = 'dotted') +
+  geom_vline(aes(xintercept = best_a0_hyvarinen, color = 'best_hyva'), linewidth = 0.5, linetype = 'solid') +
   labs(x = expression(eta), y = '') +
   theme_bw() +
   scale_color_manual(
     name = NULL,
     values = c(
       "NPP" = "#D0C366",
-      "best_crps" = "black",
-      "best_hyva" = "black"
+      "best_crps" = "#66A8D0",
+      "best_hyva" = "#D06673"
     ),
     labels = c(
       "best_crps" = "CRPS",
@@ -515,6 +534,6 @@ plot_post_eta <- ggplot() +
         panel.background = element_rect(fill = "white", color = NA),
         plot.background = element_rect(fill = "white", color = NA))
 
-plot_par_post <- plot_post_mu + plot_post_eta + plot_layout(ncol = 3)
+plot_par_post <- plot_post_mu + plot_post_eta + plot_layout(ncol = 2)
 plot_par_post
 ggsave(plot = plot_par_post,"figures/post_normal.png", width = 15, height = 5, dpi = 320)

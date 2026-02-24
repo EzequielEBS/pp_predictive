@@ -1,7 +1,7 @@
-n0 <- 50
-n <- 50
-mu0 <- 0.5
-mu <- 0.5
+n0 <- 100
+n <- 100
+mu0 <- 1
+mu <- 1
 sigma0 <- 1
 sigma <- 1
 hist_data <- data.frame(y = rnorm(n0, mu0, sigma0))

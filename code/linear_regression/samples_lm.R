@@ -5,7 +5,7 @@ library(cmdstanr)
 library(dplyr)
 library(posterior)
 
-source("code/aux_fun_lm.R")
+source("code/linear_regression/aux_fun_lm.R")
 load("data/sim_lm_data.RData")
 formula <- y ~ X1
 family <- gaussian()
@@ -77,7 +77,7 @@ draws_priorpred_npp <- do.call(rbind, draws_priorpred_npp)
 
 
 # sample posterior 
-lm_model <- cmdstan_model("code/lm_npp_eta.stan")
+lm_model <- cmdstan_model("code/linear_regression/lm_npp_eta.stan")
 
 stan_data <- list(
   n = n,
@@ -129,9 +129,9 @@ draws_beta_npp_post <- lapply(
 )
 draws_beta_npp_post <- do.call(rbind, draws_beta_npp_post)
 
-save(draws_eta_prior, file = 'samples_ppc/draws_eta_prior.RData')
-save(draws_beta_npp_prior, file = 'samples_ppc/draws_beta_npp_prior.RData')
-save(draws_priorpred_npp, file = 'samples_ppc/draws_priorpred_npp.RData')
-save(draws_eta_post, file = 'samples_ppc/draws_eta_post.RData')
-save(draws_beta_npp_post, file = 'samples_ppc/draws_beta_npp_post.RData')
+save(draws_eta_prior, file = 'samples/draws_eta_prior.RData')
+save(draws_beta_npp_prior, file = 'samples/draws_beta_npp_prior.RData')
+save(draws_priorpred_npp, file = 'samples/draws_priorpred_npp.RData')
+save(draws_eta_post, file = 'samples/draws_eta_post.RData')
+save(draws_beta_npp_post, file = 'samples/draws_beta_npp_post.RData')
 

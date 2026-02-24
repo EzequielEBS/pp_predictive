@@ -1,7 +1,7 @@
 functions {
   vector post_par_conj_normal(real m, real v, real a, real b, real w, vector y) {
     int n = rows(y);
-    real v_star = 1/(1/w*n + v);
+    real v_star = 1/(1/w*n + 1/v);
     real m_star = v_star * (m/v + 1/w * sum(y));
     real a_star = a + 0.5*n;
     real b_star = b + 0.5 * (y' * y + 1/v * m^2 - 
