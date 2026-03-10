@@ -8,12 +8,12 @@ library(gridExtra)
 library(LaplacesDemon)
 library(patchwork)
 
-source("code/normal/generate_normal_data.R")
+# source("code/normal/generate_normal_data.R")
 load("samples/draws_mu_npp_post.RData")
 load("samples/draws_mu_npp_prior.RData")
 load("samples/draws_eta_post_normal.RData")
 load("samples/draws_eta_prior_normal.RData")
-load("samples/draws_priorpred_npp_normal.RData")
+load("samples/draws_postpred_npp_normal.RData")
 load("data/sim_normal_data.RData")
 source("code/normal/aux_fun_normal.R")
 
@@ -24,9 +24,8 @@ true_sigma_curr <- 1
 
 y0 <- hist_data$y
 n0 <- length(y0)
-y <- curr_data$y
-n <- length(y)
-
+y_train <- curr_train$y
+y_test <- curr_test$y
 
 m <- 0
 v <-  1
@@ -42,9 +41,13 @@ hyva_t <- function(y, m, v, nu){
     v_i <- v[i]
     tau_i <- sqrt(v_i)
     return(
-      2 * (nu+1) * ((x_i-m_i)^2 - nu*1/v_i) / ((x_i-m_i)^2 + nu*1/v_i^2)^2 +
-        (nu + 1)^2 * (x_i-m_i)^2 / ((x_i-m_i)^2 + nu*1/v_i^2)^2 
+      (nu+1) * (m_i^2*(nu+3) - 2*m_i*(nu+3)*x_i - 2*nu*tau_i^2 + (nu+3)*x_i^2 ) /
+        ((x_i-m_i)^2 + nu*tau_i^2)^2
     )
+    # return(
+    #   2 * (nu+1) * ((x_i-m_i)^2 - nu*1/v_i) / ((x_i-m_i)^2 + nu*1/v_i^2)^2 +
+    #     (nu + 1)^2 * (x_i-m_i)^2 / ((x_i-m_i)^2 + nu*1/v_i^2)^2 
+    # )
   })
   return(mean(unlist(out)))
 }
@@ -52,12 +55,17 @@ hyva_t <- function(y, m, v, nu){
 comp_crps <- function(eta){
   single <- function(e){
     pp_prior_par <- pp_hyper_conj_normal(e, m, v, a, b, y0)
-    m_star <- pp_prior_par$m_star
-    v_star <- pp_prior_par$v_star
-    a_star <- pp_prior_par$a_star
-    b_star <- pp_prior_par$b_star
+    m0 <- pp_prior_par$m_star
+    v0 <- pp_prior_par$v_star
+    a0 <- pp_prior_par$a_star
+    b0 <- pp_prior_par$b_star
+    post_par <- post_par_conj_normal(m0, v0, a0, b0, 1, y_train)
+    m_star <- post_par$m_star
+    v_star <- post_par$v_star
+    a_star <- post_par$a_star
+    b_star <- post_par$b_star
     w_tilde <- 1
-    y_tilde <- y
+    y_tilde <- y_test
     pred_par <- pred_par_conj_normal(m_star, v_star, a_star, b_star, w_tilde, y_tilde)
     mean(crps_t(y_tilde, pred_par$nu_pred, pred_par$m_pred, pred_par$v_pred))
   }
@@ -74,12 +82,17 @@ dev.off()
 comp_hyvarinen <- function(eta) {
   single <- function(e) {
     pp_prior_par <- pp_hyper_conj_normal(e, m, v, a, b, y0)
-    m_star <- pp_prior_par$m_star
-    v_star <- pp_prior_par$v_star
-    a_star <- pp_prior_par$a_star
-    b_star <- pp_prior_par$b_star
+    m0 <- pp_prior_par$m_star
+    v0 <- pp_prior_par$v_star
+    a0 <- pp_prior_par$a_star
+    b0 <- pp_prior_par$b_star
+    post_par <- post_par_conj_normal(m0, v0, a0, b0, 1, y_train)
+    m_star <- post_par$m_star
+    v_star <- post_par$v_star
+    a_star <- post_par$a_star
+    b_star <- post_par$b_star
     w_tilde <- 1
-    y_tilde <- y
+    y_tilde <- y_test
 
     pred_par <- pred_par_conj_normal(m_star, v_star, a_star, b_star, w_tilde, y_tilde)
 
@@ -106,7 +119,7 @@ name_crps <- "CRPS"
 name_hyv  <- "Hyva"
 
 # Wrap vectors as data frames
-obs <- 1
+obs <- 2
 # Observed value for vertical line
 obs_val <- curr_data$y[obs]
 
@@ -118,30 +131,56 @@ pp_par_hyva <- pp_hyper_conj_normal(best_a0_hyvarinen, m, v, a, b, y0)
 pp_par_eta1 <- pp_hyper_conj_normal(1, m, v, a, b, y0)
 pp_par_eta0 <- pp_hyper_conj_normal(0, m, v, a, b, y0)
 
-pred_par_crps <- pred_par_conj_normal(pp_par_crps$m_star, 
-                                  pp_par_crps$v_star, 
-                                  pp_par_crps$a_star, 
-                                  pp_par_crps$b_star, 
+post_par_crps <- post_par_conj_normal(pp_par_crps$m_star, 
+                                      pp_par_crps$v_star, 
+                                      pp_par_crps$a_star, 
+                                      pp_par_crps$b_star, 
+                                      1, 
+                                      y_train)
+post_par_hyva <- post_par_conj_normal(pp_par_hyva$m_star, 
+                                      pp_par_hyva$v_star, 
+                                      pp_par_hyva$a_star, 
+                                      pp_par_hyva$b_star, 
+                                      1, 
+                                      y_train)
+post_par_eta1 <- post_par_conj_normal(pp_par_eta1$m_star,
+                                      pp_par_eta1$v_star,
+                                      pp_par_eta1$a_star,
+                                      pp_par_eta1$b_star,
+                                      1,
+                                      y_train)
+post_par_eta0 <- post_par_conj_normal(pp_par_eta0$m_star,
+                                      pp_par_eta0$v_star,
+                                      pp_par_eta0$a_star,
+                                      pp_par_eta0$b_star,
+                                      1,
+                                      y_train)
+
+
+pred_par_crps <- pred_par_conj_normal(post_par_crps$m_star, 
+                                  post_par_crps$v_star, 
+                                  post_par_crps$a_star, 
+                                  post_par_crps$b_star, 
                                   1, 
-                                  y)
-pred_par_hyva <- pred_par_conj_normal(pp_par_hyva$m_star, 
-                                  pp_par_hyva$v_star, 
-                                  pp_par_hyva$a_star, 
-                                  pp_par_hyva$b_star, 
+                                  y_test)
+pred_par_hyva <- pred_par_conj_normal(post_par_hyva$m_star, 
+                                  post_par_hyva$v_star, 
+                                  post_par_hyva$a_star, 
+                                  post_par_hyva$b_star, 
                                   1, 
-                                  y)
-pred_par_eta1 <- pred_par_conj_normal(pp_par_eta1$m_star,
-                                  pp_par_eta1$v_star, 
-                                  pp_par_eta1$a_star, 
-                                  pp_par_eta1$b_star, 
-                                  1, 
-                                  y)
-pred_par_eta0 <- pred_par_conj_normal(pp_par_eta0$m_star,
-                                  pp_par_eta0$v_star,
-                                  pp_par_eta0$a_star,
-                                  pp_par_eta0$b_star,
+                                  y_test)
+pred_par_eta1 <- pred_par_conj_normal(post_par_eta1$m_star,
+                                  post_par_eta1$v_star,
+                                  post_par_eta1$a_star,
+                                  post_par_eta1$b_star,
                                   1,
-                                  y)
+                                  y_test)
+pred_par_eta0 <- pred_par_conj_normal(post_par_eta0$m_star,
+                                  post_par_eta0$v_star,
+                                  post_par_eta0$a_star,
+                                  post_par_eta0$b_star,
+                                  1,
+                                  y_test)
 
 # prior distributions
 plot_mu <- ggplot() +
@@ -284,7 +323,7 @@ plot_par
 ggsave(plot = plot_par,"figures/prior_normal.png", width = 15, height = 5, dpi = 320)
 
 
-# prior predictive 
+# post predictive 
 ggplot() +
   geom_function(fun = function(x) {
     dst(x, 
@@ -335,7 +374,7 @@ ggplot() +
   geom_vline(aes(xintercept = obs_val, color = 'Obs value'), linewidth = 0.5) +
   labs(x = expression(tilde(y)), y = '') +
   theme_bw() +
-  geom_density(data = data.frame(y = draws_priorpred_npp[,obs]), 
+  geom_density(data = data.frame(y = draws_postpred_npp[,obs]), 
                aes(x = y, color = "NPP"),
                linewidth = 1) +
   scale_color_manual(
@@ -398,10 +437,10 @@ ggsave("figures/ppc_npp_normal.png", width = 8, height = 5, dpi = 320)
 
 
 # post distributions
-pp_post_par_crps <- pp_post_par_conj_normal(best_a0_crps, m, v, a, b, y0, 1, y)
-pp_post_par_hyva <- pp_post_par_conj_normal(best_a0_hyvarinen, m, v, a, b, y0, 1, y)
-pp_post_par_eta1 <- pp_post_par_conj_normal(1, m, v, a, b, y0, 1, y)
-pp_post_par_eta0 <- pp_post_par_conj_normal(0, m, v, a, b, y0, 1, y)
+pp_post_par_crps <- pp_post_par_conj_normal(best_a0_crps, m, v, a, b, y0, 1, y_train)
+pp_post_par_hyva <- pp_post_par_conj_normal(best_a0_hyvarinen, m, v, a, b, y0, 1, y_train)
+pp_post_par_eta1 <- pp_post_par_conj_normal(1, m, v, a, b, y0, 1, y_train)
+pp_post_par_eta0 <- pp_post_par_conj_normal(0, m, v, a, b, y0, 1, y_train)
 
 plot_post_mu <- ggplot() +
   geom_function(fun = function(x) {

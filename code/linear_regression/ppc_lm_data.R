@@ -13,7 +13,7 @@ load("samples/draws_beta_npp_post.RData")
 load("samples/draws_beta_npp_prior.RData")
 load("samples/draws_eta_post.RData")
 load("samples/draws_eta_prior.RData")
-load("samples/draws_priorpred_npp.RData")
+load("samples/draws_postpred_npp.RData")
 load("samples/ess.RData")
 load("data/sim_lm_data.RData")
 source("code/linear_regression/aux_fun_lm.R")
@@ -27,15 +27,18 @@ true_beta_curr <- c(-0.4, 0.5)
 true_sigma_curr <- 1
 
 res_hist <- hdbayes:::stack.data(formula = formula, data.list = list(hist_data))
-res_curr <- hdbayes:::stack.data(formula = formula, data.list = list(curr_data))
+res_curr_train <- hdbayes:::stack.data(formula = formula, data.list = list(curr_train))
+res_curr_test <- hdbayes:::stack.data(formula = formula, data.list = list(curr_test))
 y0 <- res_hist$y
 X0 <- res_hist$X
 n0 <- length(y0)
-y <- res_curr$y
-X <- res_curr$X
-n <- length(y)
-p <- ncol(X)
-
+y_train <- res_curr_train$y
+X_train <- res_curr_train$X
+y_test <- res_curr_test$y
+X_test <- res_curr_test$X
+n_train <- length(y_train)
+n_test <- length(y_test)
+p <- ncol(X0)
 
 mu <- rep(0, p)
 S <-  diag(p)
@@ -51,9 +54,13 @@ hyva_t <- function(y, m, v, nu){
     v_i <- v[i]
     tau_i <- sqrt(v_i)
     return(
-      2 * (nu+1) * ((x_i-m_i)^2 - nu*1/v_i) / ((x_i-m_i)^2 + nu*1/v_i^2)^2 +
-      (nu + 1)^2 * (x_i-m_i)^2 / ((x_i-m_i)^2 + nu*1/v_i^2)^2 
-  )
+      (nu+1) * (m_i^2*(nu+3) - 2*m_i*(nu+3)*x_i - 2*nu*tau_i^2 + (nu+3)*x_i^2 ) /
+        ((x_i-m_i)^2 + nu*tau_i^2)^2
+    )
+    # return(
+    #   2 * (nu+1) * ((x_i-m_i)^2 - nu*1/v_i) / ((x_i-m_i)^2 + nu*1/v_i^2)^2 +
+    #   (nu + 1)^2 * (x_i-m_i)^2 / ((x_i-m_i)^2 + nu*1/v_i^2)^2 
+  # )
   })
   return(mean(unlist(out)))
 }
@@ -61,13 +68,18 @@ hyva_t <- function(y, m, v, nu){
 comp_crps <- function(eta) {
   single_crps <- function(e) {
     pp_prior_par <- pp_hyper_conj_lm(e, mu, S, a, b, X0, y0)
-    mu_star <- pp_prior_par$mu_star
-    S_star  <- pp_prior_par$S_star
-    a_star  <- pp_prior_par$a_star
-    b_star  <- pp_prior_par$b_star
-    V_tilde <- diag(n)
-    X_tilde <- X
-    y_tilde <- y
+    mu0 <- pp_prior_par$mu_star
+    S0  <- pp_prior_par$S_star
+    a0  <- pp_prior_par$a_star
+    b0  <- pp_prior_par$b_star
+    post_par <- post_par_conj_lm(mu0, S0, a0, b0, diag(n_train), X_train, y_train)
+    mu_star <- post_par$mu_star
+    S_star  <- post_par$S_star
+    a_star  <- post_par$a_star
+    b_star  <- post_par$b_star
+    V_tilde <- diag(n_test)
+    X_tilde <- X_test
+    y_tilde <- y_test
     pred_par <- pred_par_conj_lm(mu_star, S_star, a_star, b_star, V_tilde, X_tilde, y_tilde)
 
     mean(crps_t(y_tilde, pred_par$nu_pred, pred_par$mu_pred, diag(pred_par$S_pred)))
@@ -85,13 +97,18 @@ dev.off()
 comp_hyvarinen <- function(eta) {
   single_hyva <- function(e) {
     pp_prior_par <- pp_hyper_conj_lm(e, mu, S, a, b, X0, y0)
-    mu_star <- pp_prior_par$mu_star
-    S_star  <- pp_prior_par$S_star
-    a_star  <- pp_prior_par$a_star
-    b_star  <- pp_prior_par$b_star
-    V_tilde <- diag(n)
-    X_tilde <- X
-    y_tilde <- y
+    mu0 <- pp_prior_par$mu_star
+    S0  <- pp_prior_par$S_star
+    a0  <- pp_prior_par$a_star
+    b0  <- pp_prior_par$b_star
+    post_par <- post_par_conj_lm(mu0, S0, a0, b0, diag(n_train), X_train, y_train)
+    mu_star <- post_par$mu_star
+    S_star  <- post_par$S_star
+    a_star  <- post_par$a_star
+    b_star  <- post_par$b_star
+    V_tilde <- diag(n_test)
+    X_tilde <- X_test
+    y_tilde <- y_test
 
     pred_par <- pred_par_conj_lm(mu_star, S_star, a_star, b_star, V_tilde, X_tilde, y_tilde)
 
@@ -151,34 +168,63 @@ pp_par_hyva <- pp_hyper_conj_lm(best_a0_hyvarinen, mu, S, a, b, X0, y0)
 pp_par_eta1 <- pp_hyper_conj_lm(1, mu, S, a, b, X0, y0)
 pp_par_eta0 <- pp_hyper_conj_lm(0, mu, S, a, b, X0, y0)
 
-pred_par_crps <- pred_par_conj_lm(pp_par_crps$mu_star, 
+post_par_crps <- post_par_conj_lm(pp_par_crps$mu_star, 
                                   pp_par_crps$S_star, 
                                   pp_par_crps$a_star, 
                                   pp_par_crps$b_star, 
-                                  diag(n), 
-                                  X, 
-                                  y)
-pred_par_hyva <- pred_par_conj_lm(pp_par_hyva$mu_star, 
+                                  diag(n_train), 
+                                  X_train, 
+                                  y_train)
+post_par_hyva <- post_par_conj_lm(pp_par_hyva$mu_star, 
                                   pp_par_hyva$S_star, 
                                   pp_par_hyva$a_star, 
                                   pp_par_hyva$b_star, 
-                                  diag(n), 
-                                  X, 
-                                  y)
-pred_par_eta1 <- pred_par_conj_lm(pp_par_eta1$mu_star,
+                                  diag(n_train), 
+                                  X_train, 
+                                  y_train)
+post_par_eta1 <- post_par_conj_lm(pp_par_eta1$mu_star,
                                   pp_par_eta1$S_star, 
                                   pp_par_eta1$a_star, 
                                   pp_par_eta1$b_star, 
-                                  diag(n), 
-                                  X, 
-                                  y)
-pred_par_eta0 <- pred_par_conj_lm(pp_par_eta0$mu_star,
+                                  diag(n_train), 
+                                  X_train, 
+                                  y_train)
+post_par_eta0 <- post_par_conj_lm(pp_par_eta0$mu_star,
                                   pp_par_eta0$S_star,
                                   pp_par_eta0$a_star,
                                   pp_par_eta0$b_star,
-                                  diag(n),
-                                  X,
-                                  y)
+                                  diag(n_train),
+                                  X_train,
+                                  y_train)
+
+pred_par_crps <- pred_par_conj_lm(post_par_crps$mu_star, 
+                                  post_par_crps$S_star, 
+                                  post_par_crps$a_star, 
+                                  post_par_crps$b_star, 
+                                  diag(n_test), 
+                                  X_test, 
+                                  y_test)
+pred_par_hyva <- pred_par_conj_lm(post_par_hyva$mu_star, 
+                                  post_par_hyva$S_star, 
+                                  post_par_hyva$a_star, 
+                                  post_par_hyva$b_star, 
+                                  diag(n_test), 
+                                  X_test, 
+                                  y_test)
+pred_par_eta1 <- pred_par_conj_lm(post_par_eta1$mu_star,
+                                  post_par_eta1$S_star, 
+                                  post_par_eta1$a_star, 
+                                  post_par_eta1$b_star, 
+                                  diag(n_test), 
+                                  X_test, 
+                                  y_test)
+pred_par_eta0 <- pred_par_conj_lm(post_par_eta0$mu_star,
+                                  post_par_eta0$S_star,
+                                  post_par_eta0$a_star,
+                                  post_par_eta0$b_star,
+                                  diag(n_test),
+                                  X_test,
+                                  y_test)
 
 # prior distributions
 plot_beta1 <- ggplot() +
@@ -413,7 +459,7 @@ plot_par <- plot_beta1 + plot_beta2 + plot_eta + plot_layout(ncol = 3)
 plot_par
 ggsave(plot = plot_par,"figures/prior_lm.png", width = 15, height = 5, dpi = 320)
 
-# prior predictive 
+# post predictive 
 ggplot() +
   geom_function(fun = function(x) {
     dst(x, 
@@ -464,7 +510,7 @@ ggplot() +
   geom_vline(aes(xintercept = obs_val, color = 'Obs value'), linewidth = 0.5) +
   labs(x = expression(tilde(y)), y = '') +
   theme_bw() +
-  geom_density(data = data.frame(y = draws_priorpred_npp[,obs]), 
+  geom_density(data = data.frame(y = draws_postpred_npp[,obs]), 
                aes(x = y, color = "NPP"),
                linewidth = 1) +
   scale_color_manual(
@@ -527,10 +573,10 @@ ggsave("figures/ppc_npp_lm.png", width = 8, height = 5, dpi = 320)
 
 
 # post distributions
-pp_post_par_crps <- pp_post_par_conj_lm(best_a0_crps, mu, S, a, b, X0, y0, diag(n), X, y)
-pp_post_par_hyva <- pp_post_par_conj_lm(best_a0_hyvarinen, mu, S, a, b, X0, y0, diag(n), X, y)
-pp_post_par_eta1 <- pp_post_par_conj_lm(1, mu, S, a, b, X0, y0, diag(n), X, y)
-pp_post_par_eta0 <- pp_post_par_conj_lm(0, mu, S, a, b, X0, y0, diag(n), X, y)
+pp_post_par_crps <- pp_post_par_conj_lm(best_a0_crps, mu, S, a, b, X0, y0, diag(n_train), X_train, y_train)
+pp_post_par_hyva <- pp_post_par_conj_lm(best_a0_hyvarinen, mu, S, a, b, X0, y0, diag(n_train), X_train, y_train)
+pp_post_par_eta1 <- pp_post_par_conj_lm(1, mu, S, a, b, X0, y0, diag(n_train), X_train, y_train)
+pp_post_par_eta0 <- pp_post_par_conj_lm(0, mu, S, a, b, X0, y0, diag(n_train), X_train, y_train)
 
 plot_post_beta1 <- ggplot() +
   geom_function(fun = function(x) {

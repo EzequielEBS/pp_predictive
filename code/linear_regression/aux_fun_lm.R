@@ -81,6 +81,7 @@ pp_post_par_conj_lm <- function(eta, mu, S, a, b, X0, y0, V, X, y) {
   S <- pp_prior_par$S_star
   a <- pp_prior_par$a_star
   b <- pp_prior_par$b_star
+  n <- nrow(X)
   V <- diag(n)
   post_par <- post_par_conj_lm(mu, S, a, b, V, X, y)
   return(post_par)
