@@ -9,7 +9,6 @@ library(patchwork)
 # auxiliary functions
 #-------------------------------------------------------------------------------
 
-source("code/normal/generate_normal_data.R")
 source("code/normal/aux_fun_normal.R")
 
 comp_crps <- function(eta){
@@ -57,7 +56,7 @@ best_a0_crps <- crps_optim$minimum
 
 post_par_pool_cong <- post_par_fixed_var(m0, v0, v, data_cong$y)
 post_par_cong <- post_par_fixed_var(m0, v0, v, y_cong)
-eta_inf_cong <- estimate_eta(data_cong, post_par_cong, v)
+eta_inf_cong <- estimate_eta(data_cong, post_par_cong, v, mle = T)
 pp_par_crps_cong <- if (best_a0_crps == 0) {
   list(m_star = m0, v_star = v0)
 } else {
@@ -90,6 +89,17 @@ post_cong <- ggplot() +
   stat_function(fun = function(x) dnorm(x, mean = post_par_inf_cong$m_star, 
                                       sd = sqrt(post_par_inf_cong$v_star)),
                 aes(color = "inf")) +
+  annotate(
+    "text",
+    x = Inf, y = Inf,
+    label = bquote(
+      atop(
+        hat(eta) == .(formatC(eta_inf_cong, format = "f", digits = 3)),
+        eta[true] == .(formatC(eta_true_cong, format = "f", digits = 3)),
+      )
+    ),
+    hjust = 1.1, vjust = 1.1
+  ) +
   geom_vline(aes(xintercept = mean(y0_cong), color = "y0", linetype = "y0")) +
   geom_vline(aes(xintercept = mean(y_cong),  color = "y",  linetype = "y")) +
   scale_color_manual(values = c(
@@ -131,7 +141,7 @@ best_a0_crps_scong <- crps_optim_scong$minimum
 
 post_par_pool_scong <- post_par_fixed_var(m0, v0, v, data_scong$y)
 post_par_scong <- post_par_fixed_var(m0, v0, v, y_scong)
-eta_inf_scong <- estimate_eta(data_scong, post_par_scong, v)
+eta_inf_scong <- estimate_eta(data_scong, post_par_scong, v, mle = T)
 pp_par_crps_scong <- if (best_a0_crps_scong == 0) {
   list(m_star = m0, v_star = v0)
 } else {
@@ -164,6 +174,17 @@ post_scong <- ggplot() +
   stat_function(fun = function(x) dnorm(x, mean = post_par_inf_scong$m_star, 
                                       sd = sqrt(post_par_inf_scong$v_star)),
                 aes(color = "inf")) +
+  annotate(
+    "text",
+    x = Inf, y = Inf,
+    label = bquote(
+      atop(
+        hat(eta) == .(formatC(eta_inf_scong, format = "f", digits = 3)),
+        eta[true] == .(formatC(eta_true_scong, format = "f", digits = 3)),
+      )
+    ),
+    hjust = 1.1, vjust = 1.1
+  ) +
   geom_vline(aes(xintercept = mean(y0_scong), color = "y0", linetype = "y0")) +
   geom_vline(aes(xintercept = mean(y_scong),  color = "y",  linetype = "y")) +
   scale_color_manual(values = c(
@@ -188,7 +209,6 @@ post_scong <- ggplot() +
   xlim(0.5 - 1, 0.5 + 1) +
   theme_minimal() +
   guides(linetype = "none")
-
 print(post_scong)
 
 mu0 <- -1
@@ -206,7 +226,7 @@ best_a0_crps_incong <- crps_optim_incong$minimum
 
 post_par_pool_incong <- post_par_fixed_var(m0, v0, v, data_incong$y)
 post_par_incong <- post_par_fixed_var(m0, v0, v, y_incong)
-eta_inf_incong <- estimate_eta(data_incong, post_par_incong, v)
+eta_inf_incong <- estimate_eta(data_incong, post_par_incong, v, mle = T)
 pp_par_crps_incong <- if (best_a0_crps_incong == 0) {
   list(m_star = m0, v_star = v0)
 } else {
@@ -239,6 +259,17 @@ post_incong <- ggplot() +
   stat_function(fun = function(x) dnorm(x, mean = post_par_inf_incong$m_star, 
                                       sd = sqrt(post_par_inf_incong$v_star)),
                 aes(color = "inf")) +
+  annotate(
+    "text",
+    x = Inf, y = Inf,
+    label = bquote(
+      atop(
+        hat(eta) == .(formatC(eta_inf_incong, format = "f", digits = 3)),
+        eta[true] == .(formatC(eta_true_incong, format = "f", digits = 3)),
+      )
+    ),
+    hjust = 1.1, vjust = 1.1
+  ) +
   geom_vline(aes(xintercept = mean(y0_incong), color = "y0", linetype = "y0")) +
   geom_vline(aes(xintercept = mean(y_incong),  color = "y",  linetype = "y")) +
   scale_color_manual(values = c(
@@ -278,41 +309,3 @@ results <- data.frame(
   eta_crps = round(c(best_a0_crps, best_a0_crps_scong, best_a0_crps_incong), 3)
 )
 print(xtable::xtable(results), include.rownames = FALSE)
-
-
-
-
-
-
-
-
-ggplot() +
-  stat_function(fun = function(x) dnorm(x, mean = -1, 
-                                      sd = 1),
-                aes(color = "pool")) +
-  stat_function(fun = function(x) dnorm(x, mean = 1, 
-                                      sd = 1),
-                aes(color = "curr")) +
-  scale_color_manual(values = c(
-                              "pool" = "#0079fbff",  # blue
-                              "curr" = "#E45756",  # red
-                              "crps" = "#72B7B2",  # teal
-                              "inf"  = "#B279A2",  # muted purple
-                              "y0"   = "#2E2E2E",  # dark gray (better than pure black)
-                              "y"    = "#F58518"   # orange
-                              ),
-                      labels = c("pool" = "Pooled", 
-                                  "curr" = "Curr", 
-                                  "crps" = "CRPS", 
-                                  "inf" = "Inf-Match",
-                                  "y0" = "Hist Mean",
-                                  "y" = "Curr Mean"
-                              )
-                            ) +
-  scale_linetype_manual(values = c("y0" = "dashed", "y" = "dashed")) +
-  labs(x = "", y = "", color = "") +
-  # ggtitle("Large discrepancy") +
-  xlim(-1 - 3, 1 + 3) +
-  theme_minimal() +
-  guides(linetype = "none", color = "none")
-                              
