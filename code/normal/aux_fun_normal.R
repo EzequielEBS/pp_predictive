@@ -61,15 +61,17 @@ post_par_fixed_var <- function(m0, v0, v, y) {
               v_star = v_star))
 }
 
-edelta_normal <- function(n0, v, post_par, hat_theta) {
+edelta_normal <- function(n0, v, post_par, hat_theta, nu = .5) {
   m_star <- post_par$m_star
   v_star <- post_par$v_star
   q2 <- (m_star - hat_theta)^2
-  delta <- n0/v + n0^2/v^2 * (v_star + q2)
+  # k0 <- floor(n0^(nu))
+  k0 <- n0^(nu)
+  delta <- k0/v + k0^2/v^2 * (v_star + q2)
   return(delta)
 }
 
-estimate_eta <- function(data, post_par, v, alpha = 1/4, mle = F) {
+estimate_eta <- function(data, post_par, v, alpha = 1/4, mle = F, nu = .5) {
   y0 <- data %>% filter(data == "hist") %>% pull(y)
   y <- data %>% filter(data == "curr") %>% pull(y)
   n0 <- length(y0)
@@ -84,10 +86,10 @@ estimate_eta <- function(data, post_par, v, alpha = 1/4, mle = F) {
     hat_theta0 <- theta0_mle
   }
   # Compute the delta for the current data
-  delta_curr <- edelta_normal(n0, v, post_par, theta_mle)
+  delta_curr <- edelta_normal(n0, v, post_par, theta_mle, nu = nu)
   
   # Compute the delta for the historical data
-  delta_hist <- edelta_normal(n0, v, post_par, hat_theta0)
+  delta_hist <- edelta_normal(n0, v, post_par, hat_theta0, nu = nu)
   
   # Estimate eta using the ratio of deltas
   eta_estimate <- exp(0.5 * (log(delta_curr) - log(delta_hist)))
@@ -114,4 +116,13 @@ estimate_theta <- function(data, alpha = 1/4) {
     theta_mle = theta_mle,
     theta0_mle = theta0_mle
   ))
+}
+
+# compute 95% confidence intervals for each scenario and each n
+med_np <- function(x, gamma = 0.95){
+  ## método não-paramétrico, baseado na binomial
+  med.hat <- median(x)
+  return(
+    c(med.hat, sort(x)[qbinom(p = c(1 - gamma, 1 + gamma)/2, size = length(x), prob = 0.5)])
+  )
 }
