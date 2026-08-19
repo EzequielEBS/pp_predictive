@@ -48,7 +48,7 @@ results_scong_sce <- lapply(1:n_rep, function(j) {
     n0 <- n0_list[i]
     m0 <- 0
     v0 <- 1
-    mu0 <- 0
+    mu0 <- 0.5
     mu1 <- 1
     v <- 1
     data <- generate_normal_data(n0 = n0, n = n, mu0 = mu0, mu = mu1, sigma0 = v, sigma = v)
@@ -69,7 +69,7 @@ results_incong_sce <- lapply(1:n_rep, function(j) {
     n0 <- n0_list[i]
     m0 <- 0
     v0 <- 1
-    mu0 <- -1
+    mu0 <- 0
     mu1 <- 1
     v <- 1
     data <- generate_normal_data(n0 = n0, n = n, mu0 = mu0, mu = mu1, sigma0 = v, sigma = v)

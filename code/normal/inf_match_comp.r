@@ -69,8 +69,8 @@ post_par_crps_cong <- post_par_fixed_var(
 post_par_inf_cong <- post_par_fixed_var(
   pp_par_inf_cong$m_star, pp_par_inf_cong$v_star, v, y_cong
 )
-eta_true_cong <- sqrt(post_par_cong$v_star/v + 1/v * (post_par_cong$m_star - mu1)^2 + 1/n0) / 
-  sqrt(post_par_cong$v_star/v + 1/v * (post_par_cong$m_star - mu0)^2 + 1/n0)
+eta_true_cong <- sqrt(post_par_cong$v_star/v + 1/v * (post_par_cong$m_star - mu1)^2 + 1/(n0)^(.5)) / 
+  sqrt(post_par_cong$v_star/v + 1/v * (post_par_cong$m_star - mu0)^2 + 1/(n0)^(.5))
 
 print(paste("True eta:", round(eta_true_cong, 3)))
 print(paste("Estimated eta:", round(eta_inf_cong, 3)))
@@ -79,16 +79,19 @@ print(paste("CRPS eta:", round(best_a0_crps, 3)))
 post_cong <- ggplot() +
   stat_function(fun = function(x) dnorm(x, mean = post_par_pool_cong$m_star, 
                                       sd = sqrt(post_par_pool_cong$v_star)),
-                aes(color = "pool")) +
+                aes(color = "pool"), linewidth = 1.2
+              ) +
   stat_function(fun = function(x) dnorm(x, mean = post_par_cong$m_star, 
                                       sd = sqrt(post_par_cong$v_star)),
-                aes(color = "curr")) +
+                aes(color = "curr"), linewidth = 1.2
+              ) +
   # stat_function(fun = function(x) dnorm(x, mean = post_par_crps_cong$m_star, 
   #                                     sd = sqrt(post_par_crps_cong$v_star)),
   #               aes(color = "crps")) +
   stat_function(fun = function(x) dnorm(x, mean = post_par_inf_cong$m_star, 
                                       sd = sqrt(post_par_inf_cong$v_star)),
-                aes(color = "inf")) +
+                aes(color = "inf"), linewidth = 1.2
+              ) +
   annotate(
     "text",
     x = Inf, y = Inf,
@@ -100,8 +103,10 @@ post_cong <- ggplot() +
     ),
     hjust = 1.1, vjust = 1.1
   ) +
-  geom_vline(aes(xintercept = mean(y0_cong), color = "y0", linetype = "y0")) +
-  geom_vline(aes(xintercept = mean(y_cong),  color = "y",  linetype = "y")) +
+  geom_vline(aes(xintercept = mean(y0_cong), color = "y0", linetype = "y0"),
+              linewidth = 1) +
+  geom_vline(aes(xintercept = mean(y_cong),  color = "y",  linetype = "y"),
+              linewidth = 1) +
   scale_color_manual(values = c(
                               "pool" = "#0079fbff",  # blue
                               "curr" = "#E45756",  # red
@@ -120,13 +125,13 @@ post_cong <- ggplot() +
                             ) +
   scale_linetype_manual(values = c("y0" = "dashed", "y" = "dashed")) +
   labs(x = "", y = "", color = "") +
-  xlim(1 - 1, 1 + 1) +
+  xlim(1 - .5, 1 + .5) +
   theme_minimal() +
   guides(linetype = "none") +
   ggtitle("No discrepancy")
 print(post_cong)
 
-mu0 <- 0
+mu0 <- 0.5
 mu1 <- 1
 data_scong <- generate_normal_data(n0 = n0, n = n, mu0 = mu0, mu = mu1, sigma0 = v, sigma = v)
 y0_scong <- data_scong %>% filter(data == "hist") %>% pull(y)
@@ -154,8 +159,8 @@ pp_par_inf_scong <- post_par_fixed_var(m0, v0, v/eta_inf_scong, y0_scong)
 post_par_inf_scong <- post_par_fixed_var(
   pp_par_inf_scong$m_star, pp_par_inf_scong$v_star, v, y_scong
 )
-eta_true_scong <- sqrt(post_par_scong$v_star/v + 1/v * (post_par_scong$m_star - mu1)^2 + 1/n0) / 
-  sqrt(post_par_scong$v_star/v + 1/v * (post_par_scong$m_star - mu0)^2 + 1/n0)
+eta_true_scong <- sqrt(post_par_scong$v_star/v + 1/v * (post_par_scong$m_star - mu1)^2 + 1/(n0)^(.5)) / 
+  sqrt(post_par_scong$v_star/v + 1/v * (post_par_scong$m_star - mu0)^2 + 1/(n0)^(.5))
 
 print(paste("True eta:", round(eta_true_scong, 3)))
 print(paste("Estimated eta:", round(eta_inf_scong, 3)))
@@ -164,16 +169,19 @@ print(paste("CRPS eta:", round(best_a0_crps_scong, 3)))
 post_scong <- ggplot() +
   stat_function(fun = function(x) dnorm(x, mean = post_par_pool_scong$m_star, 
                                       sd = sqrt(post_par_pool_scong$v_star)),
-                aes(color = "pool")) +
+                aes(color = "pool"), linewidth = 1.2
+              ) +
   stat_function(fun = function(x) dnorm(x, mean = post_par_scong$m_star, 
                                       sd = sqrt(post_par_scong$v_star)),
-                aes(color = "curr")) +
+                aes(color = "curr"), linewidth = 1.2
+              ) +
   # stat_function(fun = function(x) dnorm(x, mean = post_par_crps_scong$m_star, 
   #                                     sd = sqrt(post_par_crps_scong$v_star)),
   #               aes(color = "crps")) +
   stat_function(fun = function(x) dnorm(x, mean = post_par_inf_scong$m_star, 
                                       sd = sqrt(post_par_inf_scong$v_star)),
-                aes(color = "inf")) +
+                aes(color = "inf"), linewidth = 1.2
+              ) +
   annotate(
     "text",
     x = Inf, y = Inf,
@@ -185,8 +193,10 @@ post_scong <- ggplot() +
     ),
     hjust = 1.1, vjust = 1.1
   ) +
-  geom_vline(aes(xintercept = mean(y0_scong), color = "y0", linetype = "y0")) +
-  geom_vline(aes(xintercept = mean(y_scong),  color = "y",  linetype = "y")) +
+  geom_vline(aes(xintercept = mean(y0_scong), color = "y0", linetype = "y0"), 
+              linewidth = 1) +
+  geom_vline(aes(xintercept = mean(y_scong),  color = "y",  linetype = "y"), 
+              linewidth = 1) +
   scale_color_manual(values = c(
                               "pool" = "#0079fbff",  # blue
                               "curr" = "#E45756",  # red
@@ -206,12 +216,12 @@ post_scong <- ggplot() +
   scale_linetype_manual(values = c("y0" = "dashed", "y" = "dashed")) +
   labs(x = "", y = "", color = "") +
   ggtitle("Small discrepancy") +
-  xlim(0.5 - 1, 0.5 + 1) +
+  xlim(.5 - .5, 1 + .5) +
   theme_minimal() +
   guides(linetype = "none")
 print(post_scong)
 
-mu0 <- -1
+mu0 <- 0
 mu1 <- 1
 data_incong <- generate_normal_data(n0 = n0, n = n, mu0 = mu0, mu = mu1, sigma0 = v, sigma = v)
 y0_incong <- data_incong %>% filter(data == "hist") %>% pull(y)
@@ -239,8 +249,8 @@ pp_par_inf_incong <- post_par_fixed_var(m0, v0, v/eta_inf_incong, y0_incong)
 post_par_inf_incong <- post_par_fixed_var(
   pp_par_inf_incong$m_star, pp_par_inf_incong$v_star, v, y_incong
 )
-eta_true_incong <- sqrt(post_par_incong$v_star/v + 1/v * (post_par_incong$m_star - mu1)^2 + 1/n0) / 
-  sqrt(post_par_incong$v_star/v + 1/v * (post_par_incong$m_star - mu0)^2 + 1/n0)
+eta_true_incong <- sqrt(post_par_incong$v_star/v + 1/v * (post_par_incong$m_star - mu1)^2 + 1/(n0)^(.5)) / 
+  sqrt(post_par_incong$v_star/v + 1/v * (post_par_incong$m_star - mu0)^2 + 1/(n0)^(.5))
 
 print(paste("True eta:", round(eta_true_incong, 3)))
 print(paste("Estimated eta:", round(eta_inf_incong, 3)))
@@ -249,16 +259,19 @@ print(paste("CRPS eta:", round(best_a0_crps_incong, 3)))
 post_incong <- ggplot() +
   stat_function(fun = function(x) dnorm(x, mean = post_par_pool_incong$m_star, 
                                       sd = sqrt(post_par_pool_incong$v_star)),
-                aes(color = "pool")) +
+                aes(color = "pool"), linewidth = 1.2
+              ) +
   stat_function(fun = function(x) dnorm(x, mean = post_par_incong$m_star, 
                                       sd = sqrt(post_par_incong$v_star)),
-                aes(color = "curr")) +
+                aes(color = "curr"), linewidth = 1.2
+              ) +
   # stat_function(fun = function(x) dnorm(x, mean = post_par_crps_incong$m_star, 
   #                                     sd = sqrt(post_par_crps_incong$v_star)),
   #               aes(color = "crps")) +
   stat_function(fun = function(x) dnorm(x, mean = post_par_inf_incong$m_star, 
                                       sd = sqrt(post_par_inf_incong$v_star)),
-                aes(color = "inf")) +
+                aes(color = "inf"), linewidth = 1.2
+              ) +
   annotate(
     "text",
     x = Inf, y = Inf,
@@ -270,8 +283,10 @@ post_incong <- ggplot() +
     ),
     hjust = 1.1, vjust = 1.1
   ) +
-  geom_vline(aes(xintercept = mean(y0_incong), color = "y0", linetype = "y0")) +
-  geom_vline(aes(xintercept = mean(y_incong),  color = "y",  linetype = "y")) +
+  geom_vline(aes(xintercept = mean(y0_incong), color = "y0", linetype = "y0"),
+              linewidth = 1) +
+  geom_vline(aes(xintercept = mean(y_incong),  color = "y",  linetype = "y"),
+              linewidth = 1) +
   scale_color_manual(values = c(
                               "pool" = "#0079fbff",  # blue
                               "curr" = "#E45756",  # red
@@ -291,7 +306,7 @@ post_incong <- ggplot() +
   scale_linetype_manual(values = c("y0" = "dashed", "y" = "dashed")) +
   labs(x = "", y = "", color = "") +
   ggtitle("Large discrepancy") +
-  xlim(-1 - 1, 1 + 1) +
+  xlim(0 - 0.5, 1 + 0.5) +
   theme_minimal() +
   guides(linetype = "none")
 print(post_incong)
