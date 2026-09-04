@@ -3,12 +3,9 @@ library(mvtnorm)
 library(ggplot2)
 library(hdbayes)
 library(dplyr)
-library(MASS)
-library(gridExtra)
 library(LaplacesDemon)
 library(patchwork)
 
-# source("code/linear_regression/generate_lm_data.R")
 load("samples/draws_beta_npp_post.RData")
 load("samples/draws_beta_npp_prior.RData")
 load("samples/draws_eta_post.RData")
@@ -17,11 +14,11 @@ load("samples/draws_postpred_npp.RData")
 load("samples/ess.RData")
 load("data/sim_lm_data.RData")
 source("code/linear_regression/aux_fun_lm.R")
+source("code/common/plot_theme.R")
 
 formula <- y ~ X1
 family      <- gaussian()
 true_beta_hist <- c(-0.4, 0.5)
-# true_beta_hist <- c(-0.2, 0.1)
 true_sigma_hist <- 1
 true_beta_curr <- c(-0.4, 0.5)
 true_sigma_curr <- 1
@@ -57,10 +54,6 @@ hyva_t <- function(y, m, v, nu){
       (nu+1) * (m_i^2*(nu+3) - 2*m_i*(nu+3)*x_i - 2*nu*tau_i^2 + (nu+3)*x_i^2 ) /
         ((x_i-m_i)^2 + nu*tau_i^2)^2
     )
-    # return(
-    #   2 * (nu+1) * ((x_i-m_i)^2 - nu*1/v_i) / ((x_i-m_i)^2 + nu*1/v_i^2)^2 +
-    #   (nu + 1)^2 * (x_i-m_i)^2 / ((x_i-m_i)^2 + nu*1/v_i^2)^2 
-  # )
   })
   return(mean(unlist(out)))
 }
@@ -140,28 +133,6 @@ obs_val <- curr_data$y[obs]
 
 name_a01 <- "eta = 1"
 name_a00 <- "eta = 0"
-
-# mytable <- cbind(
-#   Dist = c("CRPS", "Hyvarinen", "NPP", "Full borrowing", "No borrowing"),  # remove "expression(...)" wrapper
-#   pESS = c(round(ess_eta[[which.min(crps_list)]], 2),
-#           round(ess_eta[[which.min(hyvarinen_list)]], 2),
-#           round(ess_npp, 2),
-#           round(ess_eta[[40]], 2),
-#           round(ess_eta[[1]], 2))
-# )
-
-# tg <- tableGrob(
-#   mytable,
-#   rows = NULL,
-#   theme = ttheme_default(
-#     core = list(
-#       fg_params = list(parse = TRUE, fontsize = 12)  # parse plotmath
-#     ),
-#     colhead = list(
-#       fg_params = list(parse = TRUE, fontsize = 12)
-#     )
-#   )
-# )
 
 pp_par_crps <- pp_hyper_conj_lm(best_a0_crps, mu, S, a, b, X0, y0)
 pp_par_hyva <- pp_hyper_conj_lm(best_a0_hyvarinen, mu, S, a, b, X0, y0)
@@ -278,15 +249,7 @@ plot_beta1 <- ggplot() +
                linewidth = 1) +
   scale_color_manual(
     name = NULL,
-    values = c(
-      "CRPS"    = "#66A8D0",
-      "Hyva"    = "#D06673",
-      "eta = 0" = "#7f7f7f",
-      "eta = 1" = "#7f7f7f",
-      "NPP" = "#D0C366",
-      "beta_curr" = "black",
-      "beta_hist" = "brown"
-    ),
+    values = c(pal_pp_conjugate, "beta_curr" = "black", "beta_hist" = "brown"),
     labels = c(
       "CRPS"    = "CRPS",
       "Hyva"    = "Hyvarinen",
@@ -304,21 +267,7 @@ plot_beta1 <- ggplot() +
                "beta_curr")
   ) +
   xlim(c(true_beta_curr[1]-0.5,true_beta_curr[1]+0.5)) +
-  theme(text = element_text(size = 12),        # Base text size
-        axis.title = element_text(size = 14),  # Axis titles
-        axis.text = element_text(size = 12),   # Axis tick labels
-        legend.title = element_text(size = 14),
-        legend.text = element_text(size = 12),
-        strip.text = element_text(size = 11),
-        legend.position = c(0.8, 0.74),
-        legend.background = element_rect(
-          fill = "white",     # background color of the legend
-          color = "black",    # border color
-          size = 0.3,         # border thickness
-          linetype = "solid"  # border type
-        ),
-        panel.background = element_rect(fill = "white", color = NA),
-        plot.background = element_rect(fill = "white", color = NA))
+  theme_pp(legend.position = c(0.8, 0.74))
 
 plot_beta2 <- ggplot() +
   geom_function(fun = function(x) {
@@ -371,15 +320,7 @@ plot_beta2 <- ggplot() +
                linewidth = 1) +
   scale_color_manual(
     name = NULL,
-    values = c(
-      "CRPS"    = "#66A8D0",
-      "Hyva"    = "#D06673",
-      "eta = 0" = "#7f7f7f",
-      "eta = 1" = "#7f7f7f",
-      "NPP" = "#D0C366",
-      "beta_curr" = "black",
-      "beta_hist" = "brown"
-    ),
+    values = c(pal_pp_conjugate, "beta_curr" = "black", "beta_hist" = "brown"),
     labels = c(
       "CRPS"    = "CRPS",
       "Hyva"    = "Hyvarinen",
@@ -397,21 +338,7 @@ plot_beta2 <- ggplot() +
                "beta_curr")
   )  +
   xlim(c(true_beta_curr[2]-0.5,true_beta_curr[2]+0.5)) +
-  theme(text = element_text(size = 12),        # Base text size
-        axis.title = element_text(size = 14),  # Axis titles
-        axis.text = element_text(size = 12),   # Axis tick labels
-        legend.title = element_text(size = 14),
-        legend.text = element_text(size = 12),
-        strip.text = element_text(size = 11),
-        legend.position = "none",
-        legend.background = element_rect(
-          fill = "white",     # background color of the legend
-          color = "black",    # border color
-          size = 0.3,         # border thickness
-          linetype = "solid"  # border type
-        ),
-        panel.background = element_rect(fill = "white", color = NA),
-        plot.background = element_rect(fill = "white", color = NA))
+  theme_pp(legend.position = "none")
 
 plot_eta <- ggplot() +
   geom_function(fun = function(x) {
@@ -439,21 +366,7 @@ plot_eta <- ggplot() +
                "best_hyva")
   ) +
   xlim(c(0,1)) +
-  theme(text = element_text(size = 12),        # Base text size
-        axis.title = element_text(size = 14),  # Axis titles
-        axis.text = element_text(size = 12),   # Axis tick labels
-        legend.title = element_text(size = 14),
-        legend.text = element_text(size = 12),
-        strip.text = element_text(size = 11),
-        legend.position = c(0.2, 0.1),
-        legend.background = element_rect(
-          fill = "white",     # background color of the legend
-          color = "black",    # border color
-          size = 0.3,         # border thickness
-          linetype = "solid"  # border type
-        ),
-        panel.background = element_rect(fill = "white", color = NA),
-        plot.background = element_rect(fill = "white", color = NA))
+  theme_pp(legend.position = c(0.2, 0.1))
 
 plot_par <- plot_beta1 + plot_beta2 + plot_eta + plot_layout(ncol = 3)
 plot_par
@@ -515,15 +428,7 @@ ggplot() +
                linewidth = 1) +
   scale_color_manual(
     name = NULL,
-    values = c(
-      "CRPS"    = "#66A8D0",
-      "Hyva"    = "#D06673",
-      "eta = 0" = "#7f7f7f",
-      "eta = 1" = "#7f7f7f",
-      "NPP" = "#D0C366",
-      "true" = "black",
-      "Obs value" = "black"
-    ),
+    values = c(pal_pp_conjugate, "true" = "black", "Obs value" = "black"),
     labels = c(
       "CRPS"    = "CRPS",
       "Hyva"    = "Hyvarinen",
@@ -540,36 +445,10 @@ ggplot() +
                "true",
                "Obs value")
   ) +
-  # geom_label(
-  #   data = ess_labels,
-  #   aes(x, y, label = label),
-  #   inherit.aes = FALSE,
-  #   fill = "white",   # box color
-  #   color = "black",    # text color
-  #   hjust = 0,
-  #   size = 4,
-  #   parse = TRUE
-  # ) +
-  # annotation_custom(tg, xmin=-5.4, xmax = -3.3, ymin=0.25, ymax=0.65)+
   xlim(c(obs_val-4,obs_val+4)) +
-  theme(text = element_text(size = 12),        # Base text size
-        axis.title = element_text(size = 14),  # Axis titles
-        axis.text = element_text(size = 12),   # Axis tick labels
-        legend.title = element_text(size = 14),
-        legend.text = element_text(size = 12),
-        strip.text = element_text(size = 11),
-        legend.position = c(0.9, 0.74),
-        legend.background = element_rect(
-          fill = "white",     # background color of the legend
-          color = "black",    # border color
-          size = 0.3,         # border thickness
-          linetype = "solid"  # border type
-        ),
-        panel.background = element_rect(fill = "white", color = NA),
-        plot.background = element_rect(fill = "white", color = NA))
+  theme_pp(legend.position = c(0.9, 0.74))
 
 ggsave("figures/ppc_npp_lm.png", width = 8, height = 5, dpi = 320)
-# ggsave("figures/ppc_npp_lm.pdf", width = 8, height = 5, dpi = 320, device = cairo_pdf)
 
 
 # post distributions
@@ -629,15 +508,7 @@ plot_post_beta1 <- ggplot() +
                linewidth = 1) +
   scale_color_manual(
     name = NULL,
-    values = c(
-      "CRPS"    = "#66A8D0",
-      "Hyva"    = "#D06673",
-      "eta = 0" = "#7f7f7f",
-      "eta = 1" = "#7f7f7f",
-      "NPP" = "#D0C366",
-      "beta_curr" = "black",
-      "beta_hist" = "brown"
-    ),
+    values = c(pal_pp_conjugate, "beta_curr" = "black", "beta_hist" = "brown"),
     labels = c(
       "CRPS"    = "CRPS",
       "Hyva"    = "Hyvarinen",
@@ -655,21 +526,7 @@ plot_post_beta1 <- ggplot() +
                "beta_curr")
   ) +
   xlim(c(true_beta_curr[1]-0.5,true_beta_curr[1]+0.5)) +
-  theme(text = element_text(size = 12),        # Base text size
-        axis.title = element_text(size = 14),  # Axis titles
-        axis.text = element_text(size = 12),   # Axis tick labels
-        legend.title = element_text(size = 14),
-        legend.text = element_text(size = 12),
-        strip.text = element_text(size = 11),
-        legend.position = c(0.8, 0.74),
-        legend.background = element_rect(
-          fill = "white",     # background color of the legend
-          color = "black",    # border color
-          size = 0.3,         # border thickness
-          linetype = "solid"  # border type
-        ),
-        panel.background = element_rect(fill = "white", color = NA),
-        plot.background = element_rect(fill = "white", color = NA))
+  theme_pp(legend.position = c(0.8, 0.74))
 
 plot_post_beta2 <- ggplot() +
   geom_function(fun = function(x) {
@@ -723,15 +580,7 @@ plot_post_beta2 <- ggplot() +
                linewidth = 1) +
   scale_color_manual(
     name = NULL,
-    values = c(
-      "CRPS"    = "#66A8D0",
-      "Hyva"    = "#D06673",
-      "eta = 0" = "#7f7f7f",
-      "eta = 1" = "#7f7f7f",
-      "NPP" = "#D0C366",
-      "beta_curr" = "black",
-      "beta_hist" = "brown"
-    ),
+    values = c(pal_pp_conjugate, "beta_curr" = "black", "beta_hist" = "brown"),
     labels = c(
       "CRPS"    = "CRPS",
       "Hyva"    = "Hyvarinen",
@@ -749,21 +598,7 @@ plot_post_beta2 <- ggplot() +
                "beta_curr")
   ) +
   xlim(c(true_beta_curr[2]-0.5,true_beta_curr[2]+0.5)) +
-  theme(text = element_text(size = 12),        # Base text size
-        axis.title = element_text(size = 14),  # Axis titles
-        axis.text = element_text(size = 12),   # Axis tick labels
-        legend.title = element_text(size = 14),
-        legend.text = element_text(size = 12),
-        strip.text = element_text(size = 11),
-        legend.position = "none",
-        legend.background = element_rect(
-          fill = "white",     # background color of the legend
-          color = "black",    # border color
-          size = 0.3,         # border thickness
-          linetype = "solid"  # border type
-        ),
-        panel.background = element_rect(fill = "white", color = NA),
-        plot.background = element_rect(fill = "white", color = NA))
+  theme_pp(legend.position = "none")
 
 plot_post_eta <- ggplot() +
   geom_density(data = data.frame(y = draws_eta_post), aes(x = y, color = "NPP"), linewidth = 1) +
@@ -787,21 +622,7 @@ plot_post_eta <- ggplot() +
                "best_hyva")
   ) +
   xlim(c(0,1)) +
-  theme(text = element_text(size = 12),        # Base text size
-        axis.title = element_text(size = 14),  # Axis titles
-        axis.text = element_text(size = 12),   # Axis tick labels
-        legend.title = element_text(size = 14),
-        legend.text = element_text(size = 12),
-        strip.text = element_text(size = 11),
-        legend.position = c(0.2, 0.1),
-        legend.background = element_rect(
-          fill = "white",     # background color of the legend
-          color = "black",    # border color
-          size = 0.3,         # border thickness
-          linetype = "solid"  # border type
-        ),
-        panel.background = element_rect(fill = "white", color = NA),
-        plot.background = element_rect(fill = "white", color = NA))
+  theme_pp(legend.position = c(0.2, 0.1))
 
 plot_par_post <- plot_post_beta1 + plot_post_beta2 + plot_post_eta + plot_layout(ncol = 3)
 plot_par_post

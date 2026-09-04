@@ -4,6 +4,8 @@ library(dplyr)
 library(tidyr)
 library(hdbayes)
 
+source("code/common/plot_theme.R")
+
 hist_data <- actg019
 curr_data <- actg036
 n <- nrow(curr_data)
@@ -19,25 +21,8 @@ samples_long <- samples_long %>%
   ungroup()
 samples_long <- samples_long |> filter(method != "small")
 
-pal <- c(
-  "big"       = "#D62828",  # red
-  "inf_match" = "#F77F00",  # orange
-  "inter"     = "#00B4D8",  # sky blue
-  "rate"      = "#7B2D8B",  # purple
-  "npp"       = "#023E8A",  # dark blue
-  "small"     = "#2D6A4F",  # forest green
-  "vnpp"      = "#E9C46A"   # gold
-)
-
-lty <- c(
-  "big"       = "solid",
-  "inf_match" = "solid",
-  "inter"     = "solid",
-  "rate"      = "solid",
-  "npp"       = "dashed",
-  "small"     = "solid",
-  "vnpp"      = "dashed"
-)
+pal <- pal_pp_glm
+lty <- lty_pp_glm
 
 plot_etas <- ggplot(samples_etas, aes(x = eta)) +
   geom_density(fill = "lightblue") +
@@ -45,6 +30,7 @@ plot_etas <- ggplot(samples_etas, aes(x = eta)) +
     linetype = "dotted", color = "grey40", linewidth = 0.75) +
   theme_bw() +
   labs(x = expression(hat(eta)), y = "")
+plot_etas
 
 plot_beta <- ggplot(samples_long, 
   aes(x = value, color = method, linetype = method)) +

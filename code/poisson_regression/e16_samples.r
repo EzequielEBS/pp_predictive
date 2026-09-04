@@ -7,6 +7,16 @@ library(arrow)
 
 source("code/aux_fun_inf_match_glm.r")
 
+# For reproducibility: seeds R-level RNG (the historical-subsample bootstrap
+# below). hdbayes's glm.pp()/glm.npp() wrap cmdstanr sampling and may not
+# honor R's global RNG state for the MCMC draws themselves -- check
+# ?hdbayes::glm.pp for a seed= passthrough if bit-for-bit reproducible
+# chains are also needed.
+SEED <- 20260819
+set.seed(SEED)
+ncores <- max(1, parallel::detectCores() - 1)
+chains <- 4
+
 hist <- E1684
 curr <- E1690
 
@@ -23,22 +33,21 @@ estimate_eta_e16 <- function(
   hist_data,
   curr_data,
   hist_raw,
-  beta_draws, 
-  family = poisson(), 
+  beta_draws,
+  breaks,
+  breaks_labs,
+  family = poisson(),
   nu = .5,
   offset.list = NULL
 ) {
-  # Estimate beta_hat and beta0_hat using IRLS
   formula <- as.formula(formula)
   outcome_var <- all.vars(formula)[1]
   y <- curr_data[[outcome_var]]
   X <- model.matrix(formula, data = curr_data)
   y0 <- hist_data[[outcome_var]]
   X0 <- model.matrix(formula, data = hist_data)
-  # beta_hat <- irls(y, X, family, off = offset.list[[1]])
-  # beta0_hat <- irls(y0, X0, family, off = offset.list[[2]])
   if (!is.null(offset.list)) {
-    beta_hat <- 
+    beta_hat <-
       glm(formula, data = curr_data, family = family, offset = offset.list[[1]])$coefficients %>%
       as.matrix(ncol = 1)
     beta0_hat <-
@@ -51,34 +60,23 @@ estimate_eta_e16 <- function(
       as.matrix(ncol = 1)
   }
 
-  # print(sum((beta_hat - beta0_hat)^2))
-  # print(beta_hat)
-  # print(beta0_hat)
-
   k0 <- floor(nrow(hist_raw)^(nu))
   idx0 <- sample(nrow(hist_raw), size = k0, replace = FALSE)
   hist_data_k0 <- hist_raw[idx0, ]
 
-  nbreaks <- 5
-  probs   <- 1:nbreaks / nbreaks
-  breaks  <- curr |> 
-    filter(failcens == 1) |> 
-    reframe(quant = quantile(failtime, probs = probs)) |> 
-    unlist()
-
-  breaks <- as.numeric(breaks[-nbreaks])
-
+  # `breaks`/`breaks_labs` are derived from `curr` (the fixed current-data
+  # quantiles), not from the resampled `hist_data_k0` -- they're identical on
+  # every one of the ~100 bootstrap calls to this function, so they're
+  # computed once at the top level and passed in here instead of being
+  # recomputed (and re-fed through survSplit's cut points) every time.
   split_fmla  <- Surv(failtime, failcens) ~ treatment + sex + cage + node_bin
   hist_pseudo_k0 <- survival::survSplit(formula = split_fmla, data = hist_data_k0, cut = breaks,
                                     episode = "interval", start = "start")
 
-  breaks_labs <- paste("(", c(0, round(breaks, 2)), ", ", c(round(breaks, 2), "inf"), "]", sep="")
-  levels_interval <- factor(seq_len(nbreaks), labels = breaks_labs)
-
-  hist_pseudo_k0 <- hist_pseudo_k0 |>  
+  hist_pseudo_k0 <- hist_pseudo_k0 |>
     mutate(exposure    = failtime - start,
           log_exposure = log(exposure),
-          interval    = factor(interval, levels = seq_along(levels_interval), labels = breaks_labs))
+          interval    = factor(interval, levels = seq_along(breaks_labs), labels = breaks_labs))
   X0k0 <- model.matrix(formula, data = hist_pseudo_k0)
 
   if (!is.null(offset.list)) {
@@ -144,18 +142,35 @@ logncfun <- function(a0, ...){
 }
 
 a0.lognc = lapply(
-  X = a0, 
+  X = a0,
   FUN = logncfun,
   iter_warmup = 1000,
   iter_sampling = 2000,
-  chains = 4,
-  parallel_chains = 4,
+  chains = chains,
+  parallel_chains = ncores,
   refresh = 0,
   show_messages = FALSE,
   show_exceptions = FALSE
 )
 
 a0.lognc <- data.frame( do.call(rbind, a0.lognc) )
+
+# Small helper so the six near-identical glm.pp() calls below (differing
+# only in a0.vals) don't have to repeat the same block of arguments.
+fit_eta <- function(a0.vals) {
+  glm.pp(
+    formula = fmla,
+    family = family,
+    data.list = data.list,
+    offset.list = offset.list,
+    a0.vals = a0.vals,
+    iter_warmup = 5000,
+    iter_sampling = 10000,
+    chains = chains,
+    parallel_chains = ncores,
+    refresh = 0
+  )
+}
 
 fit_npp <- glm.npp(
   formula = fmla,
@@ -166,8 +181,8 @@ fit_npp <- glm.npp(
   lognc = matrix(a0.lognc$lognc, ncol = 1),
   iter_warmup = 5000,
   iter_sampling = 10000,
-  chains = 4,
-  parallel_chains = 4,
+  chains = chains,
+  parallel_chains = ncores,
   refresh = 0,
 )
 
@@ -175,20 +190,8 @@ eta_inter <- 1/2
 eta_rate <- 1/2 * nrow(data.list[[1]]) / nrow(data.list[[2]])
 eta_small <- 0.1
 eta_big <- 0.9
- 
 
-fit0 = glm.pp(
-  formula = fmla,
-  family = family,
-  data.list = data.list,
-  offset.list = offset.list,
-  a0.vals = 0,
-  iter_warmup = 5000,
-  iter_sampling = 10000,
-  chains = 4,
-  parallel_chains = 1,
-  refresh = 0,
-)
+fit0 <- fit_eta(0)
 beta_draws <- fit0[, -1] %>% as_draws_matrix()
 
 etas <- lapply(1:100, function(i) {
@@ -200,6 +203,8 @@ etas <- lapply(1:100, function(i) {
     family = family,
     offset.list = offset.list,
     hist_raw = hist,
+    breaks = breaks,
+    breaks_labs = breaks_labs
   )
 }) %>%
   unlist()
@@ -208,66 +213,11 @@ etas_df <- data.frame(eta = etas)
 eta_inf_match <- median(etas)
 eta_inf_match
 
-fit_eta_inter <- glm.pp(
-  formula = fmla,
-  family = family,
-  data.list = data.list,
-  offset.list = offset.list,
-  a0.vals = eta_inter,
-  iter_warmup = 5000,
-  iter_sampling = 10000,
-  chains = 4,
-  parallel_chains = 4,
-  refresh = 0,
-)
-fit_eta_rate <- glm.pp(
-  formula = fmla,
-  family = family,
-  data.list = data.list,
-  offset.list = offset.list,
-  a0.vals = eta_rate,
-  iter_warmup = 5000,
-  iter_sampling = 10000,
-  chains = 4,
-  parallel_chains = 4,
-  refresh = 0,
-)
-fit_eta_small <- glm.pp(
-  formula = fmla,
-  family = family,
-  data.list = data.list,
-  offset.list = offset.list,
-  a0.vals = eta_small,
-  iter_warmup = 5000,
-  iter_sampling = 10000,
-  chains = 4,
-  parallel_chains = 4,
-  refresh = 0,
-)
-fit_eta_big <- glm.pp(
-  formula = fmla,
-  family = family,
-  data.list = data.list,
-  offset.list = offset.list,
-  a0.vals = eta_big,
-  iter_warmup = 5000,
-  iter_sampling = 10000,
-  chains = 4,
-  parallel_chains = 4,
-  refresh = 0,
-)
-fit_eta_inf_match <- glm.pp(
-  formula = fmla,
-  family = family,
-  data.list = data.list,
-  offset.list = offset.list,
-  a0.vals = ifelse(eta_inf_match > 1, 1, eta_inf_match),
-  iter_warmup = 5000,
-  iter_sampling = 10000,
-  chains = 4,
-  parallel_chains = 4,
-  refresh = 0,
-)
+fit_eta_inter    <- fit_eta(eta_inter)
+fit_eta_rate     <- fit_eta(eta_rate)
+fit_eta_small    <- fit_eta(eta_small)
+fit_eta_big      <- fit_eta(eta_big)
+fit_eta_inf_match <- fit_eta(ifelse(eta_inf_match > 1, 1, eta_inf_match))
 
 fit_vnpp <- read_parquet("samples/poisson_regression/samples_variational.parquet")
 

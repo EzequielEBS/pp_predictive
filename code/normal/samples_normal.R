@@ -6,6 +6,10 @@ library(dplyr)
 library(posterior)
 
 source("code/normal/aux_fun_normal.R")
+
+SEED <- 20260819
+set.seed(SEED)
+
 load("data/sim_normal_data.RData")
 y0 <- hist_data$y
 n0 <- length(y0)
@@ -87,25 +91,28 @@ fit <- normal_model$sample(
   iter_warmup = 2000,
   iter_sampling = 2000,
   chains = 4,
-  parallel_chains = 4
+  parallel_chains = 4,
+  seed = SEED
 )
 
 draws_eta_post <- (fit$draws(c("eta")) %>% as_draws_df())$eta
 
 sample_mu_pp_post <- function(eta) {
+  # Named distinctly from the outer-scope prior hyperparameters (m, v, a, b)
+  # they're derived from, rather than reusing (and shadowing) those names.
   pp_prior_par <- pp_hyper_conj_normal(eta, m, v, a, b, y0)
-  m <- pp_prior_par$m_star
-  v <- pp_prior_par$v_star
-  a <- pp_prior_par$a_star
-  b <- pp_prior_par$b_star
-  w <- 1
-  post_par <- post_par_conj_normal(m, v, a, b, w, y_train)
+  m_pp <- pp_prior_par$m_star
+  v_pp <- pp_prior_par$v_star
+  a_pp <- pp_prior_par$a_star
+  b_pp <- pp_prior_par$b_star
+  w_pp <- 1
+  post_par <- post_par_conj_normal(m_pp, v_pp, a_pp, b_pp, w_pp, y_train)
   m_star <- post_par$m_star
   v_star <- post_par$v_star
   a_star <- post_par$a_star
   b_star <- post_par$b_star
-  
-  tildemu <- LaplacesDemon::rst(1, mu = m_star, 
+
+  tildemu <- LaplacesDemon::rst(1, mu = m_star,
                                 sigma = b_star / a_star * v_star, nu = 2*a_star)
   return(tildemu)
 }

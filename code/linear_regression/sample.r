@@ -4,15 +4,24 @@ library(hdbayes)
 library(posterior)
 library(subsampling)
 
+set.seed(20260819)
+
+# This simulated-data CSV lives outside this repo (in a sibling "onpp"
+# checkout). The path below was previously hardcoded inline, which only
+# works from one specific machine/working directory. Point data_dir at
+# wherever that data actually lives for you (e.g. an absolute path, or set
+# the ONPP_DATA_DIR environment variable) before running this script.
+data_dir <- Sys.getenv("ONPP_DATA_DIR", "../../onpp/simulated-data-regression/data")
+
 num_sim <- 200
-data_high_cong_varying_beta_n0_ge_n <- 
-  read_csv("../../onpp/simulated-data-regression/data/sim_data_high_cong_varying_beta_p3_n0_ge_n.csv") %>%
+data_high_cong_varying_beta_n0_ge_n <-
+  read_csv(file.path(data_dir, "sim_data_high_cong_varying_beta_p3_n0_ge_n.csv")) %>%
   filter(replicate <= num_sim)
-data_small_cong_varying_beta_n0_ge_n <- 
-  read_csv("../../onpp/simulated-data-regression/data/sim_data_small_cong_varying_beta_p3_n0_ge_n.csv") %>%
+data_small_cong_varying_beta_n0_ge_n <-
+  read_csv(file.path(data_dir, "sim_data_small_cong_varying_beta_p3_n0_ge_n.csv")) %>%
   filter(replicate <= num_sim)
-data_no_cong_varying_beta_n0_ge_n <- 
-  read_csv("../../onpp/simulated-data-regression/data/sim_data_no_cong_varying_beta_p3_n0_ge_n.csv") %>%
+data_no_cong_varying_beta_n0_ge_n <-
+  read_csv(file.path(data_dir, "sim_data_no_cong_varying_beta_p3_n0_ge_n.csv")) %>%
   filter(replicate <= num_sim)
 
 source("code/aux_fun_inf_match_glm.r")

@@ -1,35 +1,3 @@
-irls <- function(y, X, family = gaussian(), off = NULL, tol = 1e-8, maxit = 100) {
-  if (is.function(family)) family <- family()
-  if (is.null(off)) off <- rep(0, nrow(X))
-  
-  # Initialize
-  mu  <- (y + mean(y)) / 2
-  eta <- family$linkfun(mu)
-  
-  beta <- rep(0, ncol(X))
-  
-  for (i in seq_len(maxit)) {
-    dmu_deta <- family$mu.eta(eta)
-    V_mu     <- family$variance(mu)
-    
-    # Working response and weights
-    z <- eta - off + (y - mu) / dmu_deta
-    W <- as.vector(dmu_deta^2 / V_mu)
-    
-    # Weighted least squares
-    beta_new <- lm.wfit(X, z, W)$coefficients
-    
-    # Update
-    eta <- X %*% beta_new + off
-    mu  <- family$linkinv(eta)
-    
-    if (max(abs(beta_new - beta)) < tol) break
-    beta <- beta_new
-  }
-  
-  beta_new %>% as.matrix(ncol = 1)
-}
-
 expected_sq_norm_score <- function(X, beta, beta_hat,  family = gaussian(), off = NULL) {
   if (is.function(family)) family <- family()
   if (is.null(off)) off <- rep(0, nrow(X))
@@ -97,6 +65,23 @@ expected_sq_norm_score_vec <- function(X, beta_mat, beta_hat, family = gaussian(
   term1 + term2
 }
 
+med_app <- function(x, gamma = 0.95){
+  ## Aproximação normal usando o método Delta.
+  dens <- density(x)
+  app.pdf <- approxfun(dens)
+  med.hat <- median(x)
+  n <- length(x)
+  sd.approx <- 1/(4 * n * (app.pdf(med.hat))^2)
+  pars <- c(med.hat, sqrt(sd.approx))
+  approx.ci <- qnorm(p = c(1 - gamma, 1 + gamma)/2, mean = pars[1], sd = pars[2])
+  return(
+  list(
+    hat_median = med.hat, 
+    lower = approx.ci[1],
+    upper = approx.ci[2]
+  ))
+}
+
 estimate_eta_glm <- function(
   formula,
   curr_data,
@@ -105,7 +90,11 @@ estimate_eta_glm <- function(
   family = gaussian(), 
   nu = .5,
   offset.list = NULL,
-  ssp = F
+  ssp = F,
+  K = 100,
+  SEED = 1234,
+  g = 0.95,
+  ncores = detectCores() - 1
 ) {
   # Estimate beta_hat and beta0_hat using IRLS
   formula <- as.formula(formula)
@@ -114,8 +103,6 @@ estimate_eta_glm <- function(
   X <- model.matrix(formula, data = curr_data)
   y0 <- hist_data[[outcome_var]]
   X0 <- model.matrix(formula, data = hist_data)
-  # beta_hat <- irls(y, X, family, off = offset.list[[1]])
-  # beta0_hat <- irls(y0, X0, family, off = offset.list[[2]])
   if (!is.null(offset.list)) {
     beta_hat <- 
       glm(formula, data = curr_data, family = family, offset = offset.list[[1]])$coefficients %>%
@@ -130,115 +117,185 @@ estimate_eta_glm <- function(
       as.matrix(ncol = 1)
   }
 
-  # print(sum((beta_hat - beta0_hat)^2))
-  # print(beta_hat)
-  # print(beta0_hat)
-
   k0 <- floor(nrow(X0)^(nu))
-  if (ssp) {
-    if (family$family == "binomial") {
-      ssp.results <- ssp.glm(
-        formula  = formula,
-        data     = hist_data,
-        n.plt    = nrow(hist_data),
-        n.ssp    = k0,
-        family   = "quasibinomial",
-        sampling.method = "withReplacement"
-      )
-    } else{
-      ssp.results <- ssp.glm(
-        formula  = formula,
-        data     = hist_data,
-        n.plt    = nrow(hist_data),
-        n.ssp    = k0,
-        family   = family$family,
-        sampling.method = "withReplacement"
-      )
-    }
-    idx0 <- ssp.results$index
-    } else {
-    idx0 <- sample(nrow(X0), size = k0, replace = FALSE)
-  }
-  X0k0 <- X0[idx0,]
-  if (!is.null(offset.list)) {
-    off <- offset.list[[2]][idx0]
-  } else {
-    off <- NULL
-  }
-  num <- expected_sq_norm_score_vec(X0k0, beta_draws, beta_hat, family, off = off)
-  den <- expected_sq_norm_score_vec(X0k0, beta_draws, beta0_hat, family, off = off)
+  cl <- makeCluster(ncores)
+  on.exit(stopCluster(cl), add = TRUE)   # moved up: guarantees cleanup even if
+                                          # clusterExport/parLapply below errors
+  clusterSetRNGStream(cl, SEED)
+  if (ssp) clusterEvalQ(cl, library(subsampling))  # ssp.glm() needs this loaded
+                                                     # on each worker, not just
+                                                     # the master session
 
-  hat_eta <- exp(0.5 * (log(mean(num)) - log(mean(den))))
-  return(hat_eta)
+  clusterExport(cl, varlist =
+    c("formula",
+      "curr_data",
+      "hist_data",
+      "beta_draws",
+      "family",
+      "expected_sq_norm_score_vec",
+      "X0",
+      "beta_hat",
+      "beta0_hat",
+      "offset.list",
+      "ssp",
+      "k0"
+    ),
+    envir = environment()
+  )
+
+  etas <- parLapply(cl, 1:K, function(i) {
+    if (ssp) {
+      if (family$family == "binomial") {
+        ssp.results <- ssp.glm(
+          formula  = formula,
+          data     = hist_data,
+          n.plt    = nrow(hist_data),
+          n.ssp    = k0,
+          family   = "quasibinomial",
+          sampling.method = "withReplacement"
+        )
+      } else{
+        ssp.results <- ssp.glm(
+          formula  = formula,
+          data     = hist_data,
+          n.plt    = nrow(hist_data),
+          n.ssp    = k0,
+          family   = family$family,
+          sampling.method = "withReplacement"
+        )
+      }
+      idx0 <- ssp.results$index
+    } else {
+      idx0 <- sample(nrow(X0), size = k0, replace = FALSE)
+    }
+    X0k0 <- X0[idx0, , drop = FALSE]
+    if (!is.null(offset.list)) {
+      off <- offset.list[[2]][idx0]
+    } else {
+      off <- NULL
+    }
+    num <- expected_sq_norm_score_vec(X0k0, beta_draws, beta_hat, family, off = off)
+    den <- expected_sq_norm_score_vec(X0k0, beta_draws, beta0_hat, family, off = off)
+
+    hat_eta <- exp(0.5 * (log(mean(num)) - log(mean(den))))
+    return(hat_eta)
+  }) %>%
+    unlist()
+
+  # c() (not list()) so hat_median/lower/upper end up alongside etas at the
+  # TOP level of the returned list -- list(etas=etas, med_app(...)) would
+  # nest med_app's list as an unnamed 2nd element instead, so res$hat_median
+  # etc. would silently be NULL.
+  return(c(list(etas = etas), med_app(etas, gamma = g)))
 }
 
-compute_n <- function(
-  l, 
-  gamma,
-  formula,
-  curr_data,
-  hist_data,
-  beta_draws,
-  family,
-  max_iter = 1000,
-  starting_M = 100,
-  non_par = F,
-  ncores = detectCores() - 1
-) {
-  M <- starting_M
-  aux <- T
-  while(aux) {
-    print(paste0("M = ", M))
-    cl <- makeCluster(ncores)
 
-    clusterExport(cl, varlist = 
-      c("estimate_eta_glm", 
-        "formula", 
-        "curr_data", 
-        "hist_data", 
-        "beta_draws", 
-        "family",
-        "expected_sq_norm_score_vec"
-      ),
-      envir = environment()
+#' Given estimate_eta_glm()'s returned c(median, lower, upper) and the K it
+#' was run with, recover the implied required K for a target relative
+#' error epsilon at confidence gamma. Same reverse-engineering trick as
+#' before: med_app()'s internal sd.approx = sigma^2 / K, recovered exactly
+#' from the CI via qnorm's inverse (no need to see the raw etas).
+n_required_from_eta_result <- function(res, K, epsilon, gamma) {
+  m_hat <- res$hat_median
+  upper <- res$upper
+  z <- qnorm((1 + gamma) / 2)
+  sd_hat <- (upper - m_hat) / z
+  sigma2_hat <- sd_hat^2 * K
+  n_required <- z^2 * sigma2_hat / (epsilon^2 * m_hat^2)
+  list(m_hat = m_hat, sd_hat = sd_hat, sigma2_hat = sigma2_hat,
+       n_required = n_required)
+}
+ 
+## ---- sequential driver: re-call estimate_eta_glm() with a bigger K --------
+
+#' Grow K by directly re-running estimate_eta_glm() until the K it was run
+#' with is consistent with what its own output says is needed.
+#'
+#' Each iteration is a FULL rerun of estimate_eta_glm() (refits both GLMs,
+#' regenerates all K replicates from scratch) -- this is the cost of
+#' treating it as a black box rather than exposing draw_one_eta()
+#' separately. SEED is bumped each call so retries aren't silently
+#' correlated with the previous run's random draws.
+#'
+#' @param formula,curr_data,hist_data,beta_draws,family,nu,offset.list,ssp,ncores
+#'   passed straight through to estimate_eta_glm() -- same names, same
+#'   defaults, so a call here mirrors a call to estimate_eta_glm() directly.
+#' @param K0 starting K
+#' @param epsilon target relative error
+#' @param gamma target confidence level (passed through as g)
+#' @param confirm_frac look-ahead confirmation batch size as a fraction of
+#'   K_current (K is bumped by at least this much for one confirming rerun
+#'   once the sufficiency check first passes)
+#' @param max_iter safety cap on iterations
+sequential_K_for_eta <- function(formula, curr_data, hist_data, beta_draws,
+                                  family = gaussian(), nu = .5,
+                                  offset.list = NULL, ssp = FALSE,
+                                  ncores = detectCores() - 1,
+                                  K0 = 100, epsilon, gamma = 0.95,
+                                  SEED0 = 1234, confirm_frac = 0.1,
+                                  max_iter = 15, verbose = TRUE) {
+  K_current <- K0
+  seed_offset <- 0
+  history <- data.frame(iter = integer(), K = integer(), m_hat = double(),
+                         n_required = double(), action = character(),
+                         stringsAsFactors = FALSE)
+
+  run_once <- function(K, seed) {
+    estimate_eta_glm(
+      formula = formula, curr_data = curr_data, hist_data = hist_data,
+      beta_draws = beta_draws, family = family, nu = nu,
+      offset.list = offset.list, ssp = ssp, K = K, SEED = seed, g = gamma,
+      ncores = ncores
     )
-    clusterEvalQ(cl, {
-      library(dplyr)
-      library(tidyr)
-    })
-    etas <- parLapply(cl, 1:M, function(i) {
-      estimate_eta_glm(
-        formula = formula,
-        curr_data = curr_data,
-        hist_data = hist_data,
-        beta_draws = beta_draws, 
-        family = family
-      )
-    }) %>% unlist()
+  }
 
-    on.exit(stopCluster(cl))
-    med_hat <- median(etas)
-    dens <- density(etas)
-    app_pdf <- approxfun(dens)
-    sd_approx <- 1/(4 * M * (app_pdf(med_hat))^2)
-    pars <- c(med_hat, sqrt(sd_approx))
-    if (non_par) {
-      bounds <- sort(etas)[qbinom(p = c(1 - gamma, 1 + gamma)/2, size = length(etas), prob = 0.5)]
-    } else {
-      bounds <- qnorm(p = c(1 - gamma, 1 + gamma)/2, mean = pars[1], sd = pars[2])
+  for (iter in seq_len(max_iter)) {
+    seed_offset <- seed_offset + 1
+    res <- run_once(K_current, SEED0 + seed_offset)
+    est <- n_required_from_eta_result(res, K_current, epsilon, gamma)
+    sufficient <- est$n_required <= K_current
+ 
+    if (!sufficient) {
+      if (verbose) cat(sprintf(
+        "iter %2d: K=%5d  m_hat=%.4f  n_required=%7.1f  [growing]\n",
+        iter, K_current, est$m_hat, est$n_required))
+      history <- rbind(history, data.frame(
+        iter = iter, K = K_current, m_hat = est$m_hat,
+        n_required = est$n_required, action = "grow",
+        stringsAsFactors = FALSE))
+      K_current <- ceiling(est$n_required)
+      next
     }
-    len <- bounds[2] - bounds[1]
-    if (l < len & M < max_iter) {
-      M <- 2 * M
-      if (M > max_iter) {
-        aux <- F
-      }
-    } else {
-      aux <- F
+ 
+    # Looks sufficient -- confirm with one more rerun at a slightly larger K
+    K_confirm <- K_current + max(10, ceiling(confirm_frac * K_current))
+    seed_offset <- seed_offset + 1
+    res_check <- run_once(K_confirm, SEED0 + seed_offset)
+    est_check <- n_required_from_eta_result(res_check, K_confirm, epsilon, gamma)
+    confirmed <- est_check$n_required <= K_confirm
+ 
+    if (verbose) cat(sprintf(
+      "iter %2d: K=%5d  m_hat=%.4f  n_required=%7.1f  [checking sufficiency at K=%d -> n_required=%.1f, %s]\n",
+      iter, K_current, est$m_hat, est$n_required, K_confirm,
+      est_check$n_required, if (confirmed) "confirmed" else "not confirmed"))
+ 
+    history <- rbind(history, data.frame(
+      iter = iter, K = K_current, m_hat = est$m_hat,
+      n_required = est$n_required,
+      action = if (confirmed) "confirmed" else "look-ahead-failed",
+      stringsAsFactors = FALSE))
+ 
+    if (confirmed) {
+      if (verbose) cat(sprintf("\nConverged after %d iterations. K_final = %d\n",
+                                iter, K_confirm))
+      # c() so etas/hat_median/lower/upper from res_check land at the TOP
+      # level alongside K_final/history -- e.g. K_est$etas works directly,
+      # matching how actg_sample.r uses the result.
+      return(c(list(K_final = K_confirm, history = history), res_check))
     }
+    K_current <- K_confirm
   }
-  if (M > max_iter) {
-    warning(paste0("Maximum number of iterations reached. M = ", M))
-  }
-  return(list(M = M, med_hat = med_hat, bounds = bounds))
+
+  warning("max_iter reached without confirmed convergence; returning last result")
+  c(list(K_final = K_current, history = history), res)
 }

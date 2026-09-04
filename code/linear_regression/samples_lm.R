@@ -6,6 +6,10 @@ library(dplyr)
 library(posterior)
 
 source("code/linear_regression/aux_fun_lm.R")
+
+SEED <- 20260819
+set.seed(SEED)
+
 load("data/sim_lm_data.RData")
 formula <- y ~ X1
 family <- gaussian()
@@ -105,25 +109,28 @@ fit <- lm_model$sample(
   iter_warmup = 2000,
   iter_sampling = 2000,
   chains = 4,
-  parallel_chains = 4
+  parallel_chains = 4,
+  seed = SEED
 )
 
 draws_eta_post <- (fit$draws(c("eta")) %>% as_draws_df())$eta
 
 sample_beta_pp_post <- function(eta) {
+  # Named distinctly from the outer-scope prior hyperparameters (mu, S, a, b)
+  # they're derived from, rather than reusing (and shadowing) those names.
   pp_prior_par <- pp_hyper_conj_lm(eta, mu, S, a, b, X0, y0)
-  mu <- pp_prior_par$mu_star
-  S <- pp_prior_par$S_star
-  a <- pp_prior_par$a_star
-  b <- pp_prior_par$b_star
-  V <- diag(n_train)
-  post_par <- post_par_conj_lm(mu, S, a, b, V, X_train, y_train)
+  mu_pp <- pp_prior_par$mu_star
+  S_pp <- pp_prior_par$S_star
+  a_pp <- pp_prior_par$a_star
+  b_pp <- pp_prior_par$b_star
+  V_pp <- diag(n_train)
+  post_par <- post_par_conj_lm(mu_pp, S_pp, a_pp, b_pp, V_pp, X_train, y_train)
   mu_star <- post_par$mu_star
   S_star <- post_par$S_star
   a_star <- post_par$a_star
   b_star <- post_par$b_star
-  
-  tildebeta <- mvtnorm::rmvt(1, delta = mu_star, 
+
+  tildebeta <- mvtnorm::rmvt(1, delta = mu_star,
                              sigma = b_star / a_star * S_star,
                              df = 2*a_star)
   return(tildebeta)

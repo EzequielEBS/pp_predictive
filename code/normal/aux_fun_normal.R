@@ -1,40 +1,60 @@
+# The normal-mean conjugate update (unknown mean, unknown variance, Normal-
+# Inverse-Gamma prior) implemented below is mathematically the p = 1,
+# intercept-only special case of the linear-regression conjugate update in
+# code/linear_regression/aux_fun_lm.R: take X = a column of 1s, mu = [m],
+# S = [v], and V = w * I_n. Rather than maintaining two independent (and
+# previously slightly-drifting) implementations of the same algebra, the
+# four functions below are thin wrappers that delegate to the lm versions
+# and unwrap the resulting 1x1 matrices back into scalars, so there's a
+# single implementation to keep correct.
+#
+# Trade-off: pred_par_conj_lm() builds a full m x m predictive covariance
+# matrix, so pred_par_conj_normal() below is O(length(y_tilde)^2) rather
+# than the previous O(1) -- fine for the sample sizes used in this repo
+# (tens to low hundreds of test points), but worth knowing if this is ever
+# reused with a much larger test set.
+source("code/linear_regression/aux_fun_lm.R")
+
 post_par_conj_normal <- function(m, v, a, b, w, y) {
   n <- length(y)
-  v_star <- 1/(1/w*n + 1/v)
-  m_star <- v_star * (m/v + 1/w* sum(y))
-  a_star <- a + n/2
-  b_star <- b + 0.5 * (1/w*t(y) %*% y + 1/v * m^2 - 
-                         1/v_star * m_star^2)
-  return(list(m_star = m_star,
-              v_star = v_star,
-              a_star = a_star,
-              b_star = as.numeric(b_star)))
+  res <- post_par_conj_lm(
+    mu = matrix(m, 1, 1), S = matrix(v, 1, 1), a = a, b = b,
+    V = w * diag(n), X = matrix(1, n, 1), y = y
+  )
+  list(
+    m_star = as.numeric(res$mu_star),
+    v_star = as.numeric(res$S_star),
+    a_star = res$a_star,
+    b_star = res$b_star
+  )
 }
 
 pred_par_conj_normal <- function(m_star, v_star, a_star, b_star, w_tilde, y_tilde) {
   n <- length(y_tilde)
-  v_pred <- b_star / a_star * (1/w_tilde + v_star)
-  m_pred <- m_star
-  nu_pred <- 2 * a_star
-  
-  return(list(nu_pred = nu_pred,
-              m_pred = m_pred,
-              v_pred = v_pred))
+  res <- pred_par_conj_lm(
+    mu_star = matrix(m_star, 1, 1), S_star = matrix(v_star, 1, 1),
+    a_star = a_star, b_star = b_star,
+    V_tilde = w_tilde * diag(n), X_tilde = matrix(1, n, 1), y_tilde = y_tilde
+  )
+  list(
+    nu_pred = res$nu_pred,
+    m_pred  = as.numeric(res$mu_pred[1]),
+    v_pred  = as.numeric(res$S_pred[1, 1])
+  )
 }
 
 pp_hyper_conj_normal <- function(eta, m, v, a, b, y0) {
   n0 <- length(y0)
-  if (eta == 0) {
-    return(list(m_star = m,
-                v_star = v,
-                a_star = a,
-                b_star = b))
-  } else {
-    w0 <- 1/eta
-    a0 <- a + 0.5*n0*(eta-1)
-    post_pars <- post_par_conj_normal(m, v, a0, b, w0, y0)
-    return(post_pars)
-  }
+  res <- pp_hyper_conj_lm(
+    eta, mu = matrix(m, 1, 1), S = matrix(v, 1, 1), a = a, b = b,
+    X0 = matrix(1, n0, 1), y0 = y0
+  )
+  list(
+    m_star = as.numeric(res$mu_star),
+    v_star = as.numeric(res$S_star),
+    a_star = res$a_star,
+    b_star = res$b_star
+  )
 }
 
 pp_post_par_conj_normal <- function(eta, m, v, a, b, y0, w, y) {
@@ -65,7 +85,6 @@ edelta_normal <- function(n0, v, post_par, hat_theta, nu = .5) {
   m_star <- post_par$m_star
   v_star <- post_par$v_star
   q2 <- (m_star - hat_theta)^2
-  # k0 <- floor(n0^(nu))
   k0 <- n0^(nu)
   delta <- k0/v + k0^2/v^2 * (v_star + q2)
   return(delta)
@@ -76,7 +95,7 @@ estimate_eta <- function(data, post_par, v, alpha = 1/4, mle = F, nu = .5) {
   y <- data %>% filter(data == "curr") %>% pull(y)
   n0 <- length(y0)
   n <- length(y)
-  
+
   theta0_mle <- mean(y0)
   theta_mle <- mean(y)
   diff <- abs(theta0_mle - theta_mle)
@@ -87,10 +106,10 @@ estimate_eta <- function(data, post_par, v, alpha = 1/4, mle = F, nu = .5) {
   }
   # Compute the delta for the current data
   delta_curr <- edelta_normal(n0, v, post_par, theta_mle, nu = nu)
-  
+
   # Compute the delta for the historical data
   delta_hist <- edelta_normal(n0, v, post_par, hat_theta0, nu = nu)
-  
+
   # Estimate eta using the ratio of deltas
   eta_estimate <- exp(0.5 * (log(delta_curr) - log(delta_hist)))
 
@@ -102,7 +121,7 @@ estimate_theta <- function(data, alpha = 1/4) {
   y <- data %>% filter(data == "curr") %>% pull(y)
   n0 <- length(y0)
   n <- length(y)
-  
+
   theta0_mle <- mean(y0)
   theta_mle <- mean(y)
   diff <- abs(theta0_mle - theta_mle)

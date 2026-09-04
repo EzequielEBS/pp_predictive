@@ -49,6 +49,4 @@ po/*~
 rsconnect/
 
 # Others
-code/normal/normal.stan
-code/normal/check.r
 *.exe

@@ -8,9 +8,16 @@ library(subsampling)
 
 source("code/aux_fun_inf_match_glm.r")
 
+# For reproducibility: this seeds R-level RNG (subsampling, etc.). Note that
+# hdbayes's glm.pp()/glm.npp()/glm.npp.lognc() wrap cmdstanr sampling and may
+# not honor R's global RNG state for the MCMC draws themselves -- check
+# ?hdbayes::glm.pp for a seed= passthrough if you need bit-for-bit
+# reproducible chains as well.
+SEED <- 20260819
+set.seed(SEED)
 
 ## obtain number of cores
-ncores        = 1
+ncores        = detectCores() - 1
 chains        = 4      ## number of Markov chains to run
 iter_warmup   = 5000   ## warmup per chain for MCMC sampling
 iter_sampling = 10000   ## number of samples post warmup per chain
@@ -47,50 +54,23 @@ fit0 = glm.pp(
 )
 beta_draws <- fit0[, -1] %>% as_draws_matrix()
 
-l <- 0.01
-gamma <- 0.95
-best_sample_size <- compute_n(
-  l, 
-  gamma,
-  formula,
-  curr_data,
-  hist_data,
-  beta_draws,
-  family,
-  max_iter = 2000,
-  starting_M = 100,
-  non_par = T
-)
-best_sample_size
+eps <- 0.01
+g <- 0.95
 
-ncores <- detectCores() - 1
-cl <- makeCluster(ncores)
-clusterExport(cl, varlist = 
-  c("estimate_eta_glm", 
-    "formula", 
-    "curr_data", 
-    "hist_data", 
-    "beta_draws", 
-    "family",
-    "expected_sq_norm_score_vec"
-  ),
-  envir = environment()
+K_est <- sequential_K_for_eta(
+  formula = formula, 
+  curr_data = curr_data, 
+  hist_data = hist_data,
+  beta_draws = beta_draws, 
+  family = family,
+  K0 = 100, 
+  epsilon = eps, 
+  gamma = g,
+  SEED0 = SEED
 )
-clusterEvalQ(cl, {
-  library(dplyr)
-  library(tidyr)
-})
-etas <- parLapply(cl, 1:best_sample_size$M, function(i) {
-  estimate_eta_glm(
-    formula = formula,
-    curr_data = curr_data,
-    hist_data = hist_data,
-    beta_draws = beta_draws, 
-    family = family
-  )
-}) %>% unlist()
-stopCluster(cl)
+K_est
 
+etas <- K_est$etas
 eta_inf_match <- median(etas)
 eta_inf_match
 
@@ -143,8 +123,8 @@ logncfun = function(a0, ...){
   )
 }
 
-cl = makeCluster(15)
-clusterSetRNGStream(cl, 123)
+cl = makeCluster(ncores)
+clusterSetRNGStream(cl, SEED)
 clusterExport(cl, varlist = c('formula', 'family', 'hist_data'))
 
 ## call created function

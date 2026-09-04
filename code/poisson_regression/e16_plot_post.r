@@ -4,6 +4,8 @@ library(dplyr)
 library(tidyr)
 library(hdbayes)
 
+source("code/common/plot_theme.R")
+
 hist_data <- E1684
 curr_data <- E1690
 n <- nrow(curr_data)
@@ -28,25 +30,8 @@ samples_long <- samples_long %>%
   filter(value <= quantile(value, 0.995)) %>%  # drop top 0.5% per panel
   ungroup()
 
-pal <- c(
-  "big"       = "#D62828",  # red
-  "inf_match" = "#F77F00",  # orange
-  "inter"     = "#00B4D8",  # sky blue
-  "rate"      = "#7B2D8B",  # purple
-  "npp"       = "#023E8A",  # dark blue
-  "small"     = "#2D6A4F",  # forest green
-  "vnpp"      = "#E9C46A"   # gold
-)
-
-lty <- c(
-  "big"       = "solid",
-  "inf_match" = "solid",
-  "inter"     = "solid",
-  "rate"      = "solid",
-  "npp"       = "dashed",
-  "small"     = "solid",
-  "vnpp"      = "dashed"
-)
+pal <- pal_pp_glm
+lty <- lty_pp_glm
 
 plot_etas <- ggplot(samples_etas, aes(x = eta)) +
   geom_density(fill = "lightblue") +
@@ -127,7 +112,7 @@ plot_eta_npp <- ggplot(samples_eta_npp, aes(x = value, color = method, linetype 
     legend.text            = element_text(size = 11),  # <-- increase this
     strip.text             = element_text(size = 11)
   )
-plot_eta
+plot_eta_npp
 
 # save figures
 ggsave("figures/e16_beta_comp.png", plot_beta, width = 10, height = 6)

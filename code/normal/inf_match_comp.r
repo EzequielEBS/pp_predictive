@@ -11,6 +11,8 @@ library(patchwork)
 
 source("code/normal/aux_fun_normal.R")
 
+set.seed(20260819)
+
 comp_crps <- function(eta){
   single <- function(e){
     pp_prior_par <- post_par_fixed_var(m0, v0, v/e, y0)
